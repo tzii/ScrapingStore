@@ -29,7 +29,14 @@ import pandas as pd
 # Import project modules
 from scraper.product_scraper import scrape_products
 from cleaning.data_cleaner import clean_product_data
-from visualization.charts import create_dashboard, save_all_charts
+from visualization.charts import (
+    create_price_histogram,
+    create_price_box_by_availability,
+    create_price_category_bar,
+    create_availability_pie,
+    save_all_charts
+)
+from visualization.dashboard_generator import generate_dashboard_html
 
 # Ensure data directory exists before configuring logging
 os.makedirs('data', exist_ok=True)
@@ -209,9 +216,9 @@ def run_pipeline(
         logger.info("STEP 3: VISUALIZATION")
         logger.info("=" * 60)
         
-        # Create dashboard
+        # Generate new HTML dashboard
         dashboard_path = os.path.join(output_dir, "dashboard.html")
-        create_dashboard(cleaned_df, output_path=dashboard_path)
+        generate_dashboard_html(cleaned_df, dashboard_path)
         results['files']['dashboard'] = dashboard_path
         
         # Save individual charts

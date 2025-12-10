@@ -261,7 +261,8 @@ def extract_price(text: str) -> Optional[str]:
     """
     import re
     
-    # Match European price format: XX,XX € or XX.XX €
+    # Match European price format: XX,XX € or XX.XX €, allowing for loose whitespace
+    # matches: "88,99 €", "88.99€", "88 , 99 €"
     price_pattern = r'(\d{1,3}(?:[.,]\d{2})?)\s*€'
     match = re.search(price_pattern, text)
     
@@ -282,9 +283,12 @@ def extract_availability(text: str) -> str:
     """
     text_lower = text.lower()
     
-    if 'in stock' in text_lower:
+    # "Add to Basket" button implies the item is purchasable (In Stock)
+    if 'add to basket' in text_lower:
         return 'In Stock'
-    elif 'out of stock' in text_lower:
+    elif 'in stock' in text_lower:
+        return 'In Stock'
+    elif 'out of stock' in text_lower or 'unavailable' in text_lower:
         return 'Out of Stock'
     else:
         return 'Unknown'

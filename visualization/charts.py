@@ -76,10 +76,13 @@ def create_price_histogram(
         xaxis_title="Price (€)",
         yaxis_title="Number of Products",
         bargap=0.1,
-        template="plotly_white",
-        font=dict(size=12),
-        title_font=dict(size=16),
-        hoverlabel=dict(bgcolor="white"),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(size=12, color="#f8fafc"),
+        title_font=dict(size=16, color="#f8fafc"),
+        hoverlabel=dict(bgcolor="#1e293b", font=dict(color="#f8fafc")),
+        title=None, # Title is handled by HTML template
+        margin=dict(t=20, l=20, r=20, b=20)
     )
     
     # Add statistics annotation
@@ -143,10 +146,13 @@ def create_price_box_by_availability(
     )
     
     fig.update_layout(
-        template="plotly_white",
-        font=dict(size=12),
-        title_font=dict(size=16),
-        showlegend=False
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(size=12, color="#f8fafc"),
+        title_font=dict(size=16, color="#f8fafc"),
+        showlegend=False,
+        title=None,
+        margin=dict(t=20, l=20, r=20, b=20)
     )
     
     logger.info(f"Created availability box plot with {len(valid_df)} data points")
@@ -205,12 +211,15 @@ def create_price_category_bar(
     fig.update_traces(textposition='outside')
     
     fig.update_layout(
-        template="plotly_white",
-        font=dict(size=12),
-        title_font=dict(size=16),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(size=12, color="#f8fafc"),
+        title_font=dict(size=16, color="#f8fafc"),
         showlegend=False,
         xaxis_title="Price Category",
-        yaxis_title="Number of Products"
+        yaxis_title="Number of Products",
+        title=None,
+        margin=dict(t=20, l=20, r=20, b=20)
     )
     
     logger.info(f"Created price category bar chart")
@@ -259,9 +268,12 @@ def create_availability_pie(
     )
     
     fig.update_layout(
-        template="plotly_white",
-        font=dict(size=12),
-        title_font=dict(size=16)
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(size=12, color="#f8fafc"),
+        title_font=dict(size=16, color="#f8fafc"),
+        title=None,
+        margin=dict(t=20, l=20, r=20, b=20)
     )
     
     logger.info(f"Created availability pie chart")
