@@ -7,6 +7,8 @@
 
 A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration.
 
+![Dashboard Preview](assets/dashboard_preview.png)
+
 > **Made by Simone** — Student Project
 
 ---
@@ -74,8 +76,8 @@ Scrape/
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/web-scraping-portfolio.git
-cd web-scraping-portfolio
+git clone https://github.com/tzii/ScrapingStore.git
+cd ScrapingStore
 
 # Create virtual environment (recommended)
 python -m venv venv
