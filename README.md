@@ -1,5 +1,9 @@
 # 🛒 Web Scraping Portfolio Project
 
+<p align="center">
+  <img src="assets/project_logo.png" alt="ScrapingStore Logo" width="600"/>
+</p>
+
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas)
@@ -7,7 +11,9 @@
 
 A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration.
 
-![Dashboard Preview](assets/dashboard_preview.png)
+## 📸 Dashboard Preview
+
+![Modern Dashboard](assets/dashboard_modern.png)
 
 > **Made by Simone** — Student Project
 
@@ -50,7 +56,7 @@ Scrape/
 │   ├── __init__.py
 │   ├── charts.py                   # Plotly chart generators
 │   ├── dashboard_generator.py      # Modern dashboard template
-│   └── terminal_dashboard_generator.py
+│   └── terminal_dashboard_generator.py # Retro terminal style dashboard
 ├── data/                           # Output directory (gitignored)
 │   ├── products_raw.csv
 │   ├── products_cleaned.csv
@@ -146,6 +152,11 @@ python main.py --pages 10 --delay 2.0
 - Price category bar charts
 - Availability pie/donut charts
 - Combined interactive dashboard
+
+#### Terminal Dashboard Mode
+The project also includes a retro-style terminal dashboard for CLI enthusiasts:
+
+![Terminal Dashboard](assets/dashboard_terminal.png)
 
 ---
 
