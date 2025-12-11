@@ -25,10 +25,6 @@ from bs4 import BeautifulSoup
 import pandas as pd
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -116,8 +112,12 @@ def scrape_single_page(
         logger.error(f"Failed to fetch {url}: {e}")
         raise
     
-    soup = BeautifulSoup(response.content, 'lxml')
+    soup = BeautifulSoup(response.content, 'html.parser')
     products = []
+    
+    # Debug: print content length
+    print(f"DEBUG: Page source length: {len(response.content)}")
+    logger.info(f"Page source length: {len(response.content)}")
     
     # Find all product cards - they are contained in div elements with product info
     # The structure: each product has a card with image, title, price, and availability
@@ -129,6 +129,9 @@ def scrape_single_page(
         # Products are in a grid, each containing an anchor with h4 for title
         product_cards = soup.find_all('div', class_=lambda x: x and 'css-' in x)
         
+    print(f"DEBUG: Found {len(product_cards)} card elements")
+    logger.info(f"Found {len(product_cards)} card elements")
+
     # Parse each product card
     for card in product_cards:
         product = extract_product_data(card)
@@ -137,6 +140,7 @@ def scrape_single_page(
     
     # Alternative parsing strategy if above didn't work
     if not products:
+        logger.info("primary selector failed, trying alternative")
         products = parse_products_alternative(soup)
     
     logger.info(f"Extracted {len(products)} products from page")

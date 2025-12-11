@@ -27,7 +27,7 @@ from datetime import datetime
 import pandas as pd
 
 # Import project modules
-from scraper.product_scraper import scrape_products
+from scraper.product_scraper_browser import scrape_products_browser as scrape_products
 from cleaning.data_cleaner import clean_product_data
 from visualization.charts import (
     create_price_histogram,
@@ -37,6 +37,7 @@ from visualization.charts import (
     save_all_charts
 )
 from visualization.dashboard_generator import generate_dashboard_html
+from visualization.terminal_dashboard_generator import generate_terminal_dashboard
 
 # Ensure data directory exists before configuring logging
 os.makedirs('data', exist_ok=True)
@@ -220,6 +221,11 @@ def run_pipeline(
         dashboard_path = os.path.join(output_dir, "dashboard.html")
         generate_dashboard_html(cleaned_df, dashboard_path)
         results['files']['dashboard'] = dashboard_path
+
+        # Generate Terminal Dashboard
+        terminal_path = os.path.join(output_dir, "dashboard_terminal.html")
+        generate_terminal_dashboard(cleaned_df, terminal_path)
+        results['files']['dashboard_terminal'] = terminal_path
         
         # Save individual charts
         charts_dir = os.path.join(output_dir, "charts")

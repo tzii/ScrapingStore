@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScrapingStore Analytics</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <style>
+        :root {
+            /* Linear-like Palette */
+            --bg-body: #080808;
+            --bg-surface: #121212;
+            --bg-surface-hover: #18181b;
+            --text-main: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.15);
+            --primary-accent: #5e6ad2;
+            /* Linear purple-ish blue */
+            --primary-glow: rgba(94, 106, 210, 0.3);
+            --success: #27cbc0;
+            --warning: #f59e0b;
+            --error: #f43f5e;
+
+            /* Spacing */
+            --container-width: 1400px;
+            --header-height: 64px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Splash Screen */
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-body);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.8s ease, visibility 0.8s;
+        }
+
+        .splash-content {
+            text-align: center;
+            opacity: 0;
+            animation: fadeInOut 2.5s forwards;
+        }
+
+        .splash-logo {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+            letter-spacing: -0.05em;
+        }
+
+        .splash-loader {
+            width: 40px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .splash-loader::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: var(--text-main);
+            transform: translateX(-100%);
+            animation: loadProgress 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation-delay: 0.2s;
+        }
+
+        @keyframes fadeInOut {
+            0% {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            20% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            80% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(1.05);
+            }
+        }
+
+        @keyframes loadProgress {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(0%);
+            }
+        }
+
+        /* Main Layout */
+        .app-container {
+            max-width: var(--container-width);
+            margin: 0 auto;
+            padding: 2rem;
+            width: 100%;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .app-loaded .app-container {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-icon {
+            width: 32px;
+            height: 32px;
+            background: radial-gradient(circle at top right, #6366f1, #4f46e5);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            box-shadow: 0 0 20px -5px var(--primary-accent);
+        }
+
+        .brand h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--text-main);
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            background: rgba(39, 203, 192, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(39, 203, 192, 0.2);
+            border-radius: 99px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background: currentColor;
+            border-radius: 50%;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        /* Grid Layouts */
+        .dashboard-grid {
+            display: grid;
+            gap: 1.5rem;
+            grid-template-columns: repeat(12, 1fr);
+            margin-bottom: 2rem;
+        }
+
+        /* Card Styles */
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        /* KPI Cards */
+        .kpi-card {
+            grid-column: span 3;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 140px;
+        }
+
+        .kpi-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .kpi-icon {
+            color: var(--text-muted);
+        }
+
+        .kpi-value {
+            font-size: 2.5rem;
+            font-weight: 600;
+            letter-spacing: -0.05em;
+            color: var(--text-main);
+            margin-top: auto;
+        }
+
+        .kpi-subtext {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .trend-up {
+            color: var(--success);
+        }
+
+        /* Charts */
+        .chart-card {
+            grid-column: span 8;
+            height: 400px;
+        }
+
+        .chart-card.small {
+            grid-column: span 4;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+            color: var(--text-main);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 320px;
+            width: 100%;
+        }
+
+        /* Data Tables */
+        .table-card {
+            grid-column: span 7;
+            height: 500px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            margin-right: -10px;
+            padding-right: 10px;
+        }
+
+        /* Scrollbar Styling */
+        .table-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .table-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .table-container::-webkit-scrollbar-thumb {
+            background: var(--border-subtle);
+            border-radius: 3px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            background: var(--bg-surface);
+            z-index: 10;
+        }
+
+        td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+        }
+
+        tr:hover td {
+            background: var(--bg-surface-hover);
+            color: var(--text-main);
+        }
+
+        .price-badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.75rem;
+            color: var(--text-main);
+        }
+
+        /* List Styles */
+        .list-card {
+            grid-column: span 5;
+            height: 500px;
+        }
+
+        .list-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .list-name {
+            flex: 1;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .list-bar-container {
+            flex: 1;
+            height: 6px;
+            background: var(--bg-surface-hover);
+            border-radius: 3px;
+            margin: 0 1rem;
+            overflow: hidden;
+        }
+
+        .list-bar-fill {
+            height: 100%;
+            background: var(--primary-accent);
+            border-radius: 3px;
+        }
+
+        .list-value {
+            font-size: 0.75rem;
+            font-family: monospace;
+            color: var(--text-muted);
+            width: 30px;
+            text-align: right;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: auto;
+            padding: 2rem 0;
+            border-top: 1px solid var(--border-subtle);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+
+            .kpi-card,
+            .chart-card.small {
+                grid-column: span 6;
+            }
+
+            .chart-card {
+                grid-column: span 12;
+            }
+
+            .table-card,
+            .list-card {
+                grid-column: span 12;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .kpi-card {
+                grid-column: span 12;
+            }
+
+            .app-container {
+                padding: 1rem;
+            }
+
+            header {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Splash Screen -->
+    <div id="splash-screen">
+        <div class="splash-content">
+            <div class="splash-logo">ScrapingStore</div>
+            <div class="splash-loader"></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="app-container">
+        <header>
+            <div class="brand">
+                <div class="brand-icon">S</div>
+                <h1>Analytics Dashboard</h1>
+            </div>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                Live Data
+            </div>
+        </header>
+
+        <!-- KPI Row -->
+        <div class="dashboard-grid">
+            <div class="card kpi-card">
+                <div class="kpi-header">
+                    <span class="kpi-icon">📦</span>
+                    Total Products
+                </div>
+                <!-- DYNAMIC VALUE -->
+                <div class="kpi-value" id="kpi-total">0</div>
+                <div class="kpi-subtext">
+                    <span class="trend-up">100%</span> Success Rate
+                </div>
+            </div>
+            <div class="card kpi-card">
+                <div class="kpi-header">
+                    <span class="kpi-icon">💰</span>
+                    Avg Price
+                </div>
+                <!-- DYNAMIC VALUE -->
+                <div class="kpi-value" id="kpi-avg">€0.00</div>
+                <div class="kpi-subtext">
+                    Range: €57.99 - €92.99
+                </div>
+            </div>
+            <div class="card kpi-card">
+                <div class="kpi-header">
+                    <span class="kpi-icon">💎</span>
+                    Premium Items
+                </div>
+                <!-- DYNAMIC VALUE -->
+                <div class="kpi-value" id="kpi-premium">0</div>
+                <div class="kpi-subtext">
+                    Products > €85.00
+                </div>
+            </div>
+            <div class="card kpi-card">
+                <div class="kpi-header">
+                    <span class="kpi-icon">⚡</span>
+                    Availability
+                </div>
+                <div class="kpi-value">100%</div>
+                <div class="kpi-subtext">
+                    All items in stock
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="dashboard-grid">
+            <div class="card chart-card">
+                <div class="card-title">Price Distribution</div>
+                <div class="chart-wrapper">
+                    <canvas id="priceChart"></canvas>
+                </div>
+            </div>
+            <div class="card chart-card small">
+                <div class="card-title">Price Segments</div>
+                <div class="chart-wrapper">
+                    <canvas id="segmentChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Details Row -->
+        <div class="dashboard-grid">
+            <div class="card table-card">
+                <div class="card-title">Product Catalog</div>
+                <div class="table-container">
+                    <table id="productsTable">
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>Price</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card list-card">
+                <div class="card-title">Top Franchises</div>
+                <div id="franchiseList" style="padding: 0 0.5rem;">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Generated on {{ timestamp }} • ScrapingStore Analytics</p>
+        </footer>
+    </div>
+
+    <script>
+        // --- Data Injected from Python ---
+        const products = {{ products_json | safe }};
+
+        // --- Recalculate KPIs from real data ---
+        const total = products.length;
+        const avg = products.reduce((acc, p) => acc + p.price, 0) / (total || 1);
+        const premiumCount = products.filter(p => p.price > 85).length;
+
+        document.getElementById('kpi-total').innerText = total;
+        document.getElementById('kpi-avg').innerText = '€' + avg.toFixed(2);
+        document.getElementById('kpi-premium').innerText = premiumCount;
+
+
+        // --- Splash Screen & Init ---
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const splash = document.getElementById('splash-screen');
+                splash.style.opacity = '0';
+                splash.style.visibility = 'hidden';
+                document.body.classList.add('app-loaded');
+            }, 1000);
+        });
+
+        // --- Charts Config ---
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.color = 'rgba(255, 255, 255, 0.5)';
+        Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.05)';
+
+        const gradientFill = (ctx, colorStart, colorEnd) => {
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, colorStart);
+            gradient.addColorStop(1, colorEnd);
+            return gradient;
+        };
+
+        // 1. Price Distribution (Bar Chart)
+        const priceCtx = document.getElementById('priceChart').getContext('2d');
+        const bins = [55, 60, 65, 70, 75, 80, 85, 90, 95];
+        const binLabels = ['55-60', '60-65', '65-70', '70-75', '75-80', '80-85', '85-90', '90-95'];
+        const binCounts = new Array(binLabels.length).fill(0);
+
+        products.forEach(p => {
+            const binIndex = Math.floor((p.price - 55) / 5);
+            if (binIndex >= 0 && binIndex < binCounts.length) {
+                binCounts[binIndex]++;
+            }
+        });
+
+        new Chart(priceCtx, {
+            type: 'bar',
+            data: {
+                labels: binLabels,
+                datasets: [{
+                    label: 'Product Count',
+                    data: binCounts,
+                    backgroundColor: '#5e6ad2',
+                    borderRadius: 4,
+                    hoverBackgroundColor: '#747fdb'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#18181b',
+                        titleColor: '#fff',
+                        bodyFont: { family: 'Inter' },
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: false,
+                        callbacks: {
+                            title: (items) => `Price Range: €${items[0].label}`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { display: true, drawBorder: false }
+                    },
+                    x: {
+                        grid: { display: false, drawBorder: false }
+                    }
+                }
+            }
+        });
+
+        // 2. Segments (Doughnut)
+        const segmentCtx = document.getElementById('segmentChart').getContext('2d');
+        let budget = 0, mid = 0, premium = 0, luxury = 0;
+        products.forEach(p => {
+            if (p.price < 70) budget++;
+            else if (p.price < 80) mid++;
+            else if (p.price < 90) premium++;
+            else luxury++;
+        });
+
+        new Chart(segmentCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Budget (<€70)', 'Mid (€70-80)', 'Premium (€80-90)', 'Luxury (>€90)'],
+                datasets: [{
+                    data: [budget, mid, premium, luxury],
+                    backgroundColor: [
+                        '#27cbc0', // Mint
+                        '#f59e0b', // Amber
+                        '#5e6ad2', // Indigo
+                        '#f43f5e'  // Rose
+                    ],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            padding: 20,
+                            font: { size: 12 }
+                        }
+                    }
+                }
+            }
+        });
+
+        // --- Table Population ---
+        const tableBody = document.querySelector('#productsTable tbody');
+        // Sort by price desc initially
+        const sortedProducts = [...products].sort((a, b) => b.price - a.price);
+
+        sortedProducts.forEach(p => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${p.name}</td>
+                <td><span class="price-badge">€${p.price.toFixed(2)}</span></td>
+                <td style="color: var(--success); font-size: 0.75rem;">● In Stock</td>
+            `;
+            tableBody.appendChild(row);
+        });
+
+        // --- Franchise Logic ---
+        const franchiseList = document.getElementById('franchiseList');
+        // Simple heuristic for demo purposes
+        const keywords = ['Zelda', 'Mario', 'Metal Gear', 'Gran Turismo', 'Halo', 'Persona'];
+        const franchiseData = keywords.map(key => {
+            const count = products.filter(p => p.name.includes(key)).length;
+            return { name: key, count };
+        }).sort((a, b) => b.count - a.count);
+
+        const maxCount = Math.max(...franchiseData.map(d => d.count)) || 1;
+
+        franchiseData.forEach(f => {
+            const width = (f.count / maxCount) * 100;
+            const el = document.createElement('div');
+            el.className = 'list-item';
+            el.innerHTML = `
+                <div class="list-name">${f.name}</div>
+                <div class="list-bar-container">
+                    <div class="list-bar-fill" style="width: ${width}%"></div>
+                </div>
+                <div class="list-value">${f.count}</div>
+            `;
+            franchiseList.appendChild(el);
+        });
+    </script>
+</body>
+
+</html>
