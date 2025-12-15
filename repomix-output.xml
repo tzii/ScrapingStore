@@ -1,0 +1,1461 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+assets/dashboard_modern.png
+assets/dashboard_terminal.png
+assets/project_logo.png
+cleaning/__init__.py
+cleaning/data_cleaner.py
+config.py
+data/products.db
+database.py
+LICENSE
+logger.py
+main.py
+models.py
+README.md
+requirements.txt
+scraper/__init__.py
+scraper/base.py
+scraper/product_scraper_browser.py
+scraper/product_scraper.py
+visualization/__init__.py
+visualization/dashboard_generator.py
+visualization/templates/dashboard_modern_template.html
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="config.py">
+"""
+Configuration Settings
+======================
+Centralized configuration for the scraping pipeline.
+"""
+
+import os
+from pathlib import Path
+
+# Base Paths
+BASE_DIR = Path(__file__).parent
+DATA_DIR = BASE_DIR / "data"
+ASSETS_DIR = BASE_DIR / "assets"
+TEMPLATES_DIR = BASE_DIR / "visualization" / "templates"
+
+# Database
+DB_NAME = "products.db"
+DB_PATH = DATA_DIR / DB_NAME
+DB_URL = f"sqlite:///{DB_PATH}"
+
+# Output Files
+CSV_RAW_PATH = DATA_DIR / "products_raw.csv"
+CSV_CLEANED_PATH = DATA_DIR / "products_cleaned.csv"
+CSV_POWERBI_PATH = DATA_DIR / "products_powerbi.csv"
+DASHBOARD_HTML_PATH = DATA_DIR / "dashboard.html"
+
+# Scraper Settings
+BASE_URL = "https://sandbox.oxylabs.io/products"
+DEFAULT_TIMEOUT = 30
+MAX_RETRIES = 3
+RETRY_BACKOFF = 0.5
+USER_AGENT_FALLBACK = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
+</file>
+
+<file path="database.py">
+"""
+Database Manager
+================
+Handles database connections and operations using SQLModel.
+"""
+
+from typing import List, Optional
+import pandas as pd
+from sqlmodel import Session, SQLModel, create_engine, select
+
+from config import DB_URL, CSV_POWERBI_PATH
+from models import Product
+from logger import get_logger
+
+logger = get_logger(__name__)
+
+class DatabaseManager:
+    def __init__(self, db_url: str = DB_URL):
+        self.engine = create_engine(db_url)
+
+    def init_db(self):
+        """Create database tables."""
+        SQLModel.metadata.create_all(self.engine)
+        logger.info("Database initialized.")
+
+    def save_products(self, products: List[Product]):
+        """Save a list of products to the database."""
+        if not products:
+            return
+        
+        with Session(self.engine) as session:
+            for product in products:
+                session.add(product)
+            session.commit()
+            logger.info(f"Saved {len(products)} products to database.")
+
+    def get_all_products(self) -> List[Product]:
+        """Retrieve all products from the database."""
+        with Session(self.engine) as session:
+            statement = select(Product)
+            results = session.exec(statement).all()
+            return list(results)
+    
+    def get_products_df(self) -> pd.DataFrame:
+        """Retrieve all products as a Pandas DataFrame."""
+        products = self.get_all_products()
+        return pd.DataFrame([p.model_dump() for p in products])
+
+    def export_for_powerbi(self, output_path: str = str(CSV_POWERBI_PATH)):
+        """
+        Export database content to a Power BI-compatible CSV.
+        """
+        logger.info("Exporting data for Power BI...")
+        df = self.get_products_df()
+        
+        if df.empty:
+            logger.warning("No data to export.")
+            return
+
+        # Power BI Transformations
+        # 1. Clean column names
+        df.columns = [
+            col.strip().replace(' ', '_').replace('-', '_').lower()
+            for col in df.columns
+        ]
+        
+        # 2. ISO Dates
+        if 'scraped_at' in df.columns:
+            df['scraped_at'] = pd.to_datetime(df['scraped_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        # 3. Export with BOM for Excel/Power BI compatibility
+        df.to_csv(output_path, index=False, encoding='utf-8-sig')
+        logger.info(f"Power BI export saved to {output_path}")
+</file>
+
+<file path="logger.py">
+"""
+Logging Configuration
+=====================
+Unified logging setup using Rich for beautiful console output.
+"""
+
+import logging
+from rich.logging import RichHandler
+
+def setup_logger(level: str = "INFO"):
+    """
+    Configure the root logger with RichHandler.
+    """
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[RichHandler(rich_tracebacks=True)]
+    )
+    
+    # Silence noisy libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+def get_logger(name: str) -> logging.Logger:
+    """
+    Get a logger instance with the specified name.
+    """
+    return logging.getLogger(name)
+</file>
+
+<file path="models.py">
+"""
+Data Models
+===========
+SQLModel definitions for the application.
+"""
+
+from datetime import datetime
+from typing import Optional
+from sqlmodel import Field, SQLModel
+
+class Product(SQLModel, table=True):
+    """
+    Product model representing a scraped item.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    price: float = Field(default=0.0)
+    currency: str = Field(default="EUR")
+    availability: str = Field(default="Unknown")
+    image_url: Optional[str] = None
+    source_url: str
+    scraped_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Optional metadata
+    category: Optional[str] = None
+    rating: Optional[float] = None
+</file>
+
+<file path="scraper/base.py">
+"""
+Base Scraper
+============
+Abstract base class for product scrapers.
+"""
+
+from abc import ABC, abstractmethod
+from typing import List, Optional
+import time
+from models import Product
+from logger import get_logger
+from config import BASE_URL
+
+logger = get_logger(__name__)
+
+class BaseScraper(ABC):
+    def __init__(self, base_url: str = BASE_URL, delay: float = 1.0):
+        self.base_url = base_url
+        self.delay = delay
+
+    @abstractmethod
+    def scrape(self, max_pages: Optional[int] = None) -> List[Product]:
+        """
+        Main entry point for scraping.
+        """
+        pass
+</file>
+
+<file path=".gitignore">
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Generated data files
+data/*.csv
+data/*.html
+data/*.log
+data/charts/
+
+# Debug and temporary files
+debug*.html
+debug*.py
+*_output.txt
+*_output_utf8.txt
+manual_log.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Playwright
+playwright/.cache/
+CODE_REVIEW.md
+</file>
+
+<file path="cleaning/__init__.py">
+# Cleaning Package
+</file>
+
+<file path="cleaning/data_cleaner.py">
+"""
+Data Cleaner Module
+===================
+Vectorized data cleaning pipeline using Pandas.
+"""
+
+from typing import List
+import pandas as pd
+import numpy as np
+from models import Product
+from logger import get_logger
+
+logger = get_logger(__name__)
+
+def clean_products(products: List[Product]) -> List[Product]:
+    """
+    Clean a list of Product objects using vectorized Pandas operations.
+    """
+    if not products:
+        return []
+        
+    logger.info(f"Cleaning {len(products)} products...")
+    
+    # Convert to DataFrame
+    df = pd.DataFrame([p.model_dump() for p in products])
+    
+    # 1. Clean Price
+    # Extract price using regex from 'availability' column if 'price' is 0
+    # (Since scrapers put raw text in 'availability' temporarily)
+    # Pattern: XX,XX € or XX.XX €
+    if 'availability' in df.columns:
+        price_pattern = r'(\d{1,3}(?:[.,]\d{2})?)\s*€'
+        extracted_price = df['availability'].str.extract(price_pattern)[0]
+        
+        # Normalize decimal separator (replace , with .)
+        extracted_price = extracted_price.str.replace(',', '.', regex=False)
+        
+        # Update price column where it's 0 or missing
+        df['price'] = pd.to_numeric(extracted_price, errors='coerce').fillna(0.0)
+        
+    # 2. Clean Availability
+    # "In Stock", "Out of Stock", "Unknown"
+    # Case insensitive search
+    df['availability_clean'] = 'Unknown'
+    
+    text_col = df['availability'].str.lower()
+    df.loc[text_col.str.contains('in stock|add to basket', na=False), 'availability_clean'] = 'In Stock'
+    df.loc[text_col.str.contains('out of stock|unavailable', na=False), 'availability_clean'] = 'Out of Stock'
+    
+    df['availability'] = df['availability_clean']
+    df.drop(columns=['availability_clean'], inplace=True)
+    
+    # 3. Clean Name
+    df['name'] = df['name'].str.strip()
+    
+    # 4. Deduplicate (by name)
+    initial_count = len(df)
+    df.drop_duplicates(subset=['name'], keep='first', inplace=True)
+    logger.info(f"Removed {initial_count - len(df)} duplicates.")
+    
+    # Convert back to Product objects
+    # We need to handle the fact that 'id' might be None or NaN
+    cleaned_products = []
+    for _, row in df.iterrows():
+        p = Product(**row.to_dict())
+        cleaned_products.append(p)
+        
+    return cleaned_products
+</file>
+
+<file path="LICENSE">
+MIT License
+
+Copyright (c) 2024 Simone
+
+Made by Simone, student project
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</file>
+
+<file path="scraper/__init__.py">
+# Scraper Package
+</file>
+
+<file path="scraper/product_scraper_browser.py">
+"""
+Browser Product Scraper
+=======================
+Uses Playwright for dynamic scraping with true concurrency.
+"""
+
+import asyncio
+from typing import List, Optional
+from playwright.async_api import async_playwright, Page, BrowserContext
+
+from scraper.base import BaseScraper
+from models import Product
+from logger import get_logger
+from config import DEFAULT_TIMEOUT, USER_AGENT_FALLBACK
+
+logger = get_logger(__name__)
+
+class BrowserScraper(BaseScraper):
+    def scrape(self, max_pages: Optional[int] = None) -> List[Product]:
+        """
+        Entry point that runs the async event loop.
+        """
+        return asyncio.run(self._scrape_async(max_pages))
+
+    async def _scrape_async(self, max_pages: Optional[int]) -> List[Product]:
+        logger.info(f"Starting browser scrape of {self.base_url}")
+        max_pages = max_pages or 100  # Default to 100 if None, to avoid infinite loops
+        
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(user_agent=USER_AGENT_FALLBACK)
+            
+            # Concurrency limit (e.g., 5 concurrent pages)
+            semaphore = asyncio.Semaphore(5)
+            
+            tasks = []
+            for page_num in range(1, max_pages + 1):
+                url = f"{self.base_url}?page={page_num}" if page_num > 1 else self.base_url
+                tasks.append(self._scrape_single_page(context, url, semaphore))
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            await browser.close()
+            
+            # Flatten results and filter exceptions
+            all_products = []
+            for res in results:
+                if isinstance(res, list):
+                    all_products.extend(res)
+                else:
+                    logger.error(f"Page error: {res}")
+            
+            logger.info(f"Browser scrape complete. Total products: {len(all_products)}")
+            return all_products
+
+    async def _scrape_single_page(self, context: BrowserContext, url: str, semaphore: asyncio.Semaphore) -> List[Product]:
+        async with semaphore:
+            page = await context.new_page()
+            products = []
+            try:
+                logger.info(f"Scraping {url}...")
+                await page.goto(url, timeout=DEFAULT_TIMEOUT * 1000, wait_until='domcontentloaded')
+                
+                # Use Playwright Locators instead of JS injection
+                cards = page.locator('div.product-card, div[class*="css-"]')
+                count = await cards.count()
+                
+                if count == 0:
+                    logger.warning(f"No products on {url}")
+                    return []
+
+                for i in range(count):
+                    card = cards.nth(i)
+                    try:
+                        name_el = card.locator('h4')
+                        if await name_el.count() == 0: continue
+                        
+                        name = await name_el.inner_text()
+                        
+                        # Get raw text for cleaning later
+                        text = await card.inner_text()
+                        
+                        # Image
+                        img_el = card.locator('img')
+                        img_src = await img_el.get_attribute('src') if await img_el.count() > 0 else None
+                        
+                        products.append(Product(
+                            name=name,
+                            source_url=url,
+                            price=0.0, # Placeholder
+                            availability=text, # Placeholder containing raw text
+                            image_url=img_src
+                        ))
+                    except Exception as e:
+                        continue
+                        
+            except Exception as e:
+                logger.error(f"Failed to scrape {url}: {e}")
+                raise e
+            finally:
+                await page.close()
+            
+            return products
+</file>
+
+<file path="visualization/__init__.py">
+# Visualization Package
+</file>
+
+<file path="visualization/templates/dashboard_modern_template.html">
+<!DOCTYPE html>
+<html lang="en" x-data :class="{ 'dark': $store.theme.isDark }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScrapingStore Analytics</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Theme initialization
+        const getTheme = () => {
+            if (localStorage.getItem('theme')) {
+                return localStorage.getItem('theme') === 'dark';
+            }
+            return window.matchMedia('(prefers-color-scheme: dark)').matches;
+        };
+        
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#080808',
+                            800: '#121212',
+                            700: '#18181b',
+                        },
+                        primary: '#5e6ad2',
+                        success: '#27cbc0',
+                        danger: '#f43f5e',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <!-- Grid.js -->
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Dynamic Theme Variables for Grid.js */
+        :root {
+            --grid-text: #374151;
+            --grid-bg: #ffffff;
+            --grid-border: #e5e7eb;
+            --grid-head-bg: #f9fafb;
+            --grid-hover: #f3f4f6;
+            --grid-input-bg: #ffffff;
+            --grid-input-border: #d1d5db;
+        }
+
+        .dark {
+            --grid-text: #e5e7eb;
+            --grid-bg: #121212;
+            --grid-border: #27272a;
+            --grid-head-bg: #18181b;
+            --grid-hover: #18181b;
+            --grid-input-bg: #18181b;
+            --grid-input-border: #27272a;
+        }
+
+        /* Grid.js Theme Overrides */
+        .gridjs-container { color: var(--grid-text) !important; background: transparent !important; border: none !important; }
+        .gridjs-wrapper { border-radius: 0.5rem; border: 1px solid var(--grid-border) !important; box-shadow: none !important; }
+        .gridjs-head { background-color: transparent !important; }
+        
+        th.gridjs-th {
+            background-color: var(--grid-head-bg) !important;
+            color: var(--grid-text) !important;
+            border-bottom: 1px solid var(--grid-border) !important;
+            border-top: none !important;
+        }
+        
+        td.gridjs-td {
+            background-color: var(--grid-bg) !important;
+            color: var(--grid-text) !important;
+            border-bottom: 1px solid var(--grid-border) !important;
+        }
+        
+        .gridjs-tr:hover td.gridjs-td { background-color: var(--grid-hover) !important; }
+        
+        .gridjs-footer { background-color: var(--grid-bg) !important; border-top: 1px solid var(--grid-border) !important; }
+        
+        .gridjs-pagination .gridjs-pages button {
+            background-color: var(--grid-head-bg) !important;
+            color: var(--grid-text) !important;
+            border: 1px solid var(--grid-border) !important;
+        }
+        
+        .gridjs-pagination .gridjs-pages button:hover { background-color: var(--grid-hover) !important; }
+        
+        .gridjs-pagination .gridjs-pages button.gridjs-currentPage {
+            background-color: #5e6ad2 !important;
+            border-color: #5e6ad2 !important;
+            color: white !important;
+        }
+        
+        /* Fix Search Input */
+        input.gridjs-input {
+            background-color: var(--grid-input-bg);
+            border: 1px solid var(--grid-input-border);
+            color: var(--grid-text);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-dark-900 text-gray-900 dark:text-gray-100 min-h-screen flex flex-col p-4 md:p-8 transition-colors duration-200" x-data="dashboard()">
+
+    <!-- Splash Screen -->
+    <div x-show="showSplash"
+         x-transition:leave="transition ease-in duration-500"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-50 dark:bg-dark-900 text-gray-900 dark:text-gray-100">
+        <div class="w-20 h-20 bg-gradient-to-tr from-indigo-500 to-primary rounded-2xl flex items-center justify-center shadow-2xl shadow-indigo-500/30 mb-6 animate-bounce">
+            <span class="text-4xl font-bold text-white">S</span>
+        </div>
+        <h1 class="text-2xl font-bold tracking-tight mb-2">ScrapingStore Analytics</h1>
+        <div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <span class="w-2 h-2 bg-success rounded-full animate-pulse"></span>
+            Loading Real-time Data...
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="max-w-7xl mx-auto w-full flex justify-between items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-800">
+        <div class="flex items-center gap-4">
+            <div class="w-10 h-10 bg-gradient-to-tr from-indigo-500 to-primary rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <span class="text-xl font-bold">S</span>
+            </div>
+            <div>
+                <h1 class="text-xl font-semibold tracking-tight">Analytics Dashboard</h1>
+                <p class="text-xs text-gray-500">Real-time Data Pipeline</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <button @click="$store.theme.toggle()" class="p-2 rounded-lg bg-gray-200 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                <!-- Sun Icon -->
+                <svg x-show="!$store.theme.isDark" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <!-- Moon Icon -->
+                <svg x-show="$store.theme.isDark" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+            </button>
+            <div class="flex items-center gap-3 bg-success/10 border border-success/20 px-3 py-1 rounded-full text-success text-xs font-medium">
+                <span class="w-2 h-2 bg-success rounded-full animate-pulse"></span>
+                Live Data
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto w-full grid grid-cols-12 gap-6 mb-8">
+        
+        <!-- KPI Cards -->
+        <div class="col-span-12 md:col-span-4 lg:col-span-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col justify-between h-36 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-sm dark:shadow-none">
+            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm font-medium">
+                <span>📦</span> Total Products
+            </div>
+            <div class="text-4xl font-bold tracking-tight" x-text="kpi.total">0</div>
+            <div class="text-xs text-gray-500">100% Success Rate</div>
+        </div>
+
+        <div class="col-span-12 md:col-span-4 lg:col-span-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col justify-between h-36 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-sm dark:shadow-none">
+            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm font-medium">
+                <span>💰</span> Avg Price
+            </div>
+            <div class="text-4xl font-bold tracking-tight" x-text="'€' + kpi.avg">€0.00</div>
+            <div class="text-xs text-gray-500">Market Average</div>
+        </div>
+
+        <div class="col-span-12 md:col-span-4 lg:col-span-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col justify-between h-36 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-sm dark:shadow-none">
+            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm font-medium">
+                <span>💎</span> Premium Items
+            </div>
+            <div class="text-4xl font-bold tracking-tight" x-text="kpi.premium">0</div>
+            <div class="text-xs text-gray-500">Products > €85.00</div>
+        </div>
+
+        <div class="col-span-12 md:col-span-12 lg:col-span-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col justify-between h-36 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-sm dark:shadow-none">
+            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm font-medium">
+                <span>⚡</span> Availability
+            </div>
+            <div class="text-4xl font-bold tracking-tight text-success">100%</div>
+            <div class="text-xs text-gray-500">Stock Level Healthy</div>
+        </div>
+
+        <!-- Charts -->
+        <div class="col-span-12 lg:col-span-8 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 h-96 shadow-sm dark:shadow-none">
+            <h3 class="text-lg font-medium mb-4">Price Distribution</h3>
+            <div class="h-72 w-full">
+                <canvas id="priceChart"></canvas>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-4 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 h-96 shadow-sm dark:shadow-none">
+            <h3 class="text-lg font-medium mb-4">Price Segments</h3>
+            <div class="h-72 w-full flex items-center justify-center">
+                <canvas id="segmentChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Data Table (Grid.js) -->
+        <div class="col-span-12 lg:col-span-8 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 min-h-[500px] shadow-sm dark:shadow-none">
+            <h3 class="text-lg font-medium mb-4">Product Catalog</h3>
+            <div id="grid-table"></div>
+        </div>
+
+        <!-- Franchise List -->
+        <div class="col-span-12 lg:col-span-4 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 min-h-[500px] shadow-sm dark:shadow-none">
+            <h3 class="text-lg font-medium mb-4">Top Franchises</h3>
+            <div class="space-y-4">
+                <template x-for="f in franchises" :key="f.name">
+                    <div class="flex items-center group">
+                        <div class="flex-1 text-sm text-gray-600 dark:text-gray-300 group-hover:text-black dark:group-hover:text-white transition-colors" x-text="f.name"></div>
+                        <div class="flex-1 mx-4 h-1.5 bg-gray-200 dark:bg-dark-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-primary rounded-full" :style="`width: ${(f.count / maxFranchise) * 100}%`"></div>
+                        </div>
+                        <div class="w-8 text-right text-xs font-mono text-gray-500" x-text="f.count"></div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="max-w-7xl mx-auto w-full text-center text-gray-600 text-sm py-8 border-t border-gray-200 dark:border-gray-800 mt-auto">
+        Generated on {{ timestamp }} • ScrapingStore Analytics
+    </footer>
+
+    <script>
+        // --- Data Injection ---
+        const productsData = {{ products_json | safe }};
+        const franchiseData = {{ franchise_json | safe }};
+        const kpiData = {
+            total: {{ kpi_total }},
+            avg: "{{ kpi_avg }}",
+            premium: {{ kpi_premium }}
+        };
+
+        // --- Alpine Component ---
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('theme', {
+                isDark: getTheme(),
+                toggle() {
+                    this.isDark = !this.isDark;
+                    localStorage.setItem('theme', this.isDark ? 'dark' : 'light');
+                    // Force chart update if needed, but CSS vars usually handle colors if setup correctly.
+                    // For Chart.js grid lines, we might need a manual update, but let's keep it simple for now.
+                    location.reload(); // Simplest way to ensure charts/grid redraw with correct theme
+                }
+            });
+        });
+
+        function dashboard() {
+            return {
+                showSplash: true,
+                kpi: kpiData,
+                franchises: franchiseData,
+                maxFranchise: Math.max(...franchiseData.map(d => d.count)) || 1,
+                init() {
+                    // Splash Screen Timer
+                    setTimeout(() => {
+                        this.showSplash = false;
+                    }, 2000);
+
+                    this.initCharts();
+                    this.initGrid();
+                },
+                initCharts() {
+                    const isDark = Alpine.store('theme').isDark;
+                    const gridColor = isDark ? '#27272a' : '#e5e7eb';
+                    const textColor = isDark ? '#9ca3af' : '#4b5563';
+
+                    // Price Chart Logic
+                    const priceCtx = document.getElementById('priceChart').getContext('2d');
+                    const bins = [55, 60, 65, 70, 75, 80, 85, 90, 95];
+                    const binLabels = ['55-60', '60-65', '65-70', '70-75', '75-80', '80-85', '85-90', '90-95'];
+                    const binCounts = new Array(binLabels.length).fill(0);
+
+                    productsData.forEach(p => {
+                        const binIndex = Math.floor((p.price - 55) / 5);
+                        if (binIndex >= 0 && binIndex < binCounts.length) {
+                            binCounts[binIndex]++;
+                        }
+                    });
+
+                    new Chart(priceCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: binLabels,
+                            datasets: [{
+                                label: 'Product Count',
+                                data: binCounts,
+                                backgroundColor: '#5e6ad2',
+                                borderRadius: 4,
+                                hoverBackgroundColor: '#747fdb'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: {
+                                    grid: { color: gridColor },
+                                    ticks: { color: textColor }
+                                },
+                                x: {
+                                    grid: { display: false },
+                                    ticks: { color: textColor }
+                                }
+                            }
+                        }
+                    });
+
+                    // Segment Chart
+                    const segmentCtx = document.getElementById('segmentChart').getContext('2d');
+                    let budget = 0, mid = 0, premium = 0, luxury = 0;
+                    productsData.forEach(p => {
+                        if (p.price < 70) budget++;
+                        else if (p.price < 80) mid++;
+                        else if (p.price < 90) premium++;
+                        else luxury++;
+                    });
+
+                    new Chart(segmentCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Budget', 'Mid', 'Premium', 'Luxury'],
+                            datasets: [{
+                                data: [budget, mid, premium, luxury],
+                                backgroundColor: ['#27cbc0', '#f59e0b', '#5e6ad2', '#f43f5e'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            cutout: '70%',
+                            plugins: {
+                                legend: { position: 'right', labels: { color: textColor, usePointStyle: true } }
+                            }
+                        }
+                    });
+                },
+                initGrid() {
+                    const isDark = Alpine.store('theme').isDark;
+                    
+                    new gridjs.Grid({
+                        columns: [
+                            { name: 'Product Name', width: '50%' },
+                            {
+                                name: 'Price',
+                                width: '20%',
+                                formatter: (cell) => gridjs.html(`<span class="px-2 py-1 rounded ${isDark ? 'bg-white/5' : 'bg-gray-100'} font-mono text-xs">€${parseFloat(cell).toFixed(2)}</span>`)
+                            },
+                            {
+                                name: 'Status',
+                                width: '30%',
+                                formatter: (cell) => gridjs.html(`<span class="text-success text-xs">● ${cell}</span>`)
+                            }
+                        ],
+                        data: productsData.map(p => [p.name, p.price, p.availability]),
+                        search: true,
+                        sort: true,
+                        pagination: { limit: 10 },
+                        className: {
+                            table: 'w-full text-sm text-left',
+                            thead: `text-xs uppercase ${isDark ? 'text-gray-400 bg-dark-700' : 'text-gray-500 bg-gray-50'}`,
+                            tbody: isDark ? 'bg-dark-800' : 'bg-white'
+                        }
+                    }).render(document.getElementById("grid-table"));
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+</file>
+
+<file path="visualization/dashboard_generator.py">
+import os
+import json
+from datetime import datetime
+import pandas as pd
+from jinja2 import Environment, FileSystemLoader
+
+from config import DASHBOARD_HTML_PATH, TEMPLATES_DIR
+from logger import get_logger
+from database import DatabaseManager
+
+logger = get_logger(__name__)
+
+def generate_dashboard(db: DatabaseManager, output_path: str = str(DASHBOARD_HTML_PATH)) -> str:
+    """
+    Generate the Modern HTML dashboard with Tailwind/Alpine/Grid.js.
+    """
+    logger.info("Generating Sleek Dashboard...")
+    
+    # Get Data
+    df = db.get_products_df()
+    
+    if df.empty:
+        logger.warning("No data to generate dashboard.")
+        return output_path
+
+    # --- Backend Logic (KPIs & Stats) ---
+    
+    # 1. KPIs
+    total_products = len(df)
+    avg_price = df['price'].mean() if not df.empty else 0
+    premium_count = len(df[df['price'] > 85])
+    
+    # 2. Franchise Stats (Simple heuristic)
+    keywords = ['Zelda', 'Mario', 'Metal Gear', 'Gran Turismo', 'Halo', 'Persona', 'Pokemon', 'Final Fantasy']
+    franchise_data = []
+    for key in keywords:
+        count = len(df[df['name'].str.contains(key, case=False)])
+        if count > 0:
+            franchise_data.append({'name': key, 'count': count})
+    franchise_data.sort(key=lambda x: x['count'], reverse=True)
+    
+    # 3. Price Distribution (for Charts)
+    # We'll pass raw data to frontend for Chart.js to handle, or pre-aggregate here.
+    # Let's pass raw data for flexibility.
+    
+    # 4. JSON Serialization
+    # Convert DataFrame to list of dicts for Grid.js
+    products_list = df.to_dict(orient='records')
+    products_json = json.dumps(products_list, default=str)
+    franchise_json = json.dumps(franchise_data)
+
+    # --- Render Template ---
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
+    
+    try:
+        template = env.get_template('dashboard_modern_template.html')
+    except Exception as e:
+        logger.error(f"Template not found: {e}")
+        raise
+
+    context = {
+        'timestamp': datetime.now().strftime("%b %d, %Y • %H:%M"),
+        'products_json': products_json,
+        'franchise_json': franchise_json,
+        'kpi_total': total_products,
+        'kpi_avg': f"{avg_price:.2f}",
+        'kpi_premium': premium_count,
+    }
+    
+    html_content = template.render(context)
+    
+    # Save
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+        
+    logger.info(f"Dashboard saved to {output_path}")
+    return output_path
+</file>
+
+<file path="main.py">
+"""
+ScrapingStore CLI
+=================
+Main entry point for the application.
+"""
+
+import typer
+from typing import Optional
+from enum import Enum
+import time
+
+from config import BASE_URL
+from logger import setup_logger, get_logger
+from database import DatabaseManager
+from scraper.product_scraper import StaticScraper
+from scraper.product_scraper_browser import BrowserScraper
+from cleaning.data_cleaner import clean_products
+# Import dashboard generator (will be implemented in Phase 6)
+from visualization.dashboard_generator import generate_dashboard
+
+app = typer.Typer(help="ScrapingStore Data Pipeline CLI")
+logger = get_logger("main")
+
+class ScraperType(str, Enum):
+    static = "static"
+    browser = "browser"
+
+@app.callback()
+def setup(verbose: bool = False):
+    """
+    Global setup (logging).
+    """
+    level = "DEBUG" if verbose else "INFO"
+    setup_logger(level)
+
+@app.command()
+def scrape(
+    type: ScraperType = typer.Option(ScraperType.static, help="Type of scraper to use"),
+    pages: Optional[int] = typer.Option(10, help="Max pages to scrape"),
+    delay: float = typer.Option(1.0, help="Delay between requests (seconds)"),
+    export: bool = typer.Option(True, help="Export to Power BI CSV after scraping"),
+    dashboard: bool = typer.Option(True, help="Generate dashboard after scraping"),
+):
+    """
+    Run the scraping pipeline: Scrape -> Clean -> DB -> Export.
+    """
+    start_time = time.time()
+    logger.info(f"Starting pipeline using {type.value} scraper...")
+
+    # 1. Initialize DB
+    db = DatabaseManager()
+    db.init_db()
+
+    # 2. Select Scraper
+    if type == ScraperType.static:
+        scraper = StaticScraper(base_url=BASE_URL, delay=delay)
+    else:
+        scraper = BrowserScraper(base_url=BASE_URL, delay=delay)
+
+    # 3. Scrape
+    try:
+        raw_products = scraper.scrape(max_pages=pages)
+        logger.info(f"Scraped {len(raw_products)} raw items.")
+    except Exception as e:
+        logger.error(f"Scraping failed: {e}")
+        raise typer.Exit(code=1)
+
+    # 4. Clean
+    cleaned_products = clean_products(raw_products)
+    
+    # 5. Save to DB
+    if cleaned_products:
+        db.save_products(cleaned_products)
+    else:
+        logger.warning("No products to save.")
+
+    # 6. Export
+    if export:
+        db.export_for_powerbi()
+
+    # 7. Dashboard
+    if dashboard:
+        logger.info("Generating dashboard...")
+        # We pass the DB manager to the dashboard generator so it can query stats
+        generate_dashboard(db)
+
+    duration = time.time() - start_time
+    logger.info(f"Pipeline completed in {duration:.2f} seconds.")
+
+@app.command()
+def export():
+    """
+    Export existing database data to Power BI CSV.
+    """
+    db = DatabaseManager()
+    db.export_for_powerbi()
+
+@app.command()
+def generate_report():
+    """
+    Generate the HTML dashboard from existing data.
+    """
+    db = DatabaseManager()
+    generate_dashboard(db)
+
+if __name__ == "__main__":
+    app()
+</file>
+
+<file path="requirements.txt">
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+pandas>=2.0.0
+plotly>=5.18.0
+lxml>=4.9.0
+jinja2>=3.1.0
+playwright>=1.40.0
+sqlmodel>=0.0.14
+typer>=0.9.0
+rich>=13.0.0
+fake-useragent>=1.4.0
+</file>
+
+<file path="scraper/product_scraper.py">
+"""
+Static Product Scraper
+======================
+Uses Requests and BeautifulSoup to scrape static HTML.
+"""
+
+import time
+from typing import List, Optional
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from bs4 import BeautifulSoup
+
+from scraper.base import BaseScraper
+from models import Product
+from logger import get_logger
+from config import MAX_RETRIES, RETRY_BACKOFF, DEFAULT_TIMEOUT, USER_AGENT_FALLBACK
+
+logger = get_logger(__name__)
+
+class StaticScraper(BaseScraper):
+    def __init__(self, base_url: str, delay: float = 1.0):
+        super().__init__(base_url, delay)
+        self.session = self._create_session()
+
+    def _create_session(self) -> requests.Session:
+        session = requests.Session()
+        retry = Retry(
+            total=MAX_RETRIES,
+            backoff_factor=RETRY_BACKOFF,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS"]
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        session.headers.update({'User-Agent': USER_AGENT_FALLBACK})
+        return session
+
+    def scrape(self, max_pages: Optional[int] = None) -> List[Product]:
+        logger.info(f"Starting static scrape of {self.base_url}")
+        all_products = []
+        page = 1
+        consecutive_empty = 0
+        
+        while True:
+            if max_pages and page > max_pages:
+                break
+            
+            url = f"{self.base_url}?page={page}" if page > 1 else self.base_url
+            try:
+                logger.info(f"Scraping page {page}...")
+                response = self.session.get(url, timeout=DEFAULT_TIMEOUT)
+                response.raise_for_status()
+                
+                products = self._parse_page(response.content, url)
+                
+                if not products:
+                    consecutive_empty += 1
+                    if consecutive_empty >= 3:
+                        logger.info("Stopping: 3 consecutive empty pages.")
+                        break
+                else:
+                    consecutive_empty = 0
+                    all_products.extend(products)
+                
+                page += 1
+                time.sleep(self.delay)
+                
+            except Exception as e:
+                logger.error(f"Error scraping {url}: {e}")
+                consecutive_empty += 1
+                if consecutive_empty >= 3:
+                    break
+                    
+        return all_products
+
+    def _parse_page(self, content: bytes, url: str) -> List[Product]:
+        soup = BeautifulSoup(content, 'html.parser')
+        products = []
+        
+        cards = soup.select('div.product-card')
+        # Fallback selector
+        if not cards:
+            cards = soup.find_all('div', class_=lambda x: x and 'css-' in x)
+
+        for card in cards:
+            try:
+                name_elem = card.find('h4')
+                if not name_elem: continue
+                name = name_elem.get_text(strip=True)
+                
+                # Simple text extraction for price/availability
+                text = card.get_text(separator='|', strip=True)
+                
+                # Create partial product - Cleaning will happen in pipeline
+                p = Product(
+                    name=name,
+                    source_url=url,
+                    # Store raw strings temporarily; cleaner fixes them
+                    price=0.0, 
+                    availability=text,
+                    image_url=card.find('img')['src'] if card.find('img') else None
+                )
+                products.append(p)
+            except Exception as e:
+                continue
+                
+        return products
+</file>
+
+<file path="README.md">
+# 🛒 Web Scraping Portfolio Project
+
+<p align="center">
+  <img src="assets/project_logo.png" alt="ScrapingStore Logo" width="600"/>
+</p>
+
+![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat&logo=python&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas)
+![Plotly](https://img.shields.io/badge/Plotly-Visualization-3F4F75?logo=plotly)
+
+A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration.
+
+## 📸 Dashboard Preview
+
+![Modern Dashboard](assets/dashboard_modern.png)
+
+> **Made by Simone** — Student Project
+
+---
+
+## ✨ Features & Skills Demonstrated
+
+| Category | Technologies & Techniques |
+|----------|---------------------------|
+| **Web Scraping** | Playwright (headless browser), BeautifulSoup, async/await, pagination handling |
+| **Data Cleaning** | Pandas, regex, currency parsing, duplicate removal, data validation |
+| **Visualization** | Plotly Express, interactive dashboards, responsive HTML exports |
+| **Data Export** | Power BI-ready CSV (UTF-8 BOM), automated pipeline |
+
+---
+
+## 🎯 Project Overview
+
+This project scrapes product data from the [Oxylabs Sandbox E-commerce](https://sandbox.oxylabs.io/products) website and processes it through a complete data pipeline:
+
+1. **Web Scraping** - Extract ~3000 products using Playwright browser automation
+2. **Data Cleaning** - Process and transform raw data with Pandas
+3. **Visualization** - Create interactive charts with Plotly Express
+4. **Power BI Export** - Generate analysis-ready CSV files
+
+---
+
+## 📁 Project Structure
+
+```
+Scrape/
+├── scraper/
+│   ├── __init__.py
+│   ├── product_scraper.py          # BeautifulSoup scraper (static)
+│   └── product_scraper_browser.py  # Playwright scraper (dynamic JS)
+├── cleaning/
+│   ├── __init__.py
+│   └── data_cleaner.py             # Pandas data cleaning pipeline
+├── visualization/
+│   ├── __init__.py
+│   ├── charts.py                   # Plotly chart generators
+│   ├── dashboard_generator.py      # Modern dashboard template
+│   └── terminal_dashboard_generator.py # Retro terminal style dashboard
+├── data/                           # Output directory (gitignored)
+│   ├── products_raw.csv
+│   ├── products_cleaned.csv
+│   ├── products_powerbi.csv
+│   ├── dashboard.html
+│   └── charts/
+├── main.py                         # Pipeline orchestrator
+├── requirements.txt
+├── LICENSE
+└── README.md
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.9 or higher
+- pip package manager
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/tzii/ScrapingStore.git
+cd ScrapingStore
+
+# Create virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install Playwright browsers
+playwright install chromium
+```
+
+### Running the Pipeline
+
+```bash
+# Quick test: scrape 2 pages (~64 products)
+python main.py --pages 2
+
+# Default: scrape 10 pages (~320 products)
+python main.py
+
+# Scrape all pages (~3000 products)
+python main.py --all
+
+# Custom delay between requests (be respectful!)
+python main.py --pages 10 --delay 2.0
+```
+
+---
+
+## 📊 Output Files
+
+| File | Description |
+|------|-------------|
+| `products_raw.csv` | Raw scraped data |
+| `products_cleaned.csv` | Cleaned and transformed data |
+| `products_powerbi.csv` | Power BI-ready export (UTF-8 BOM) |
+| `dashboard.html` | Interactive modern dashboard |
+| `dashboard_terminal.html` | Terminal-style dashboard |
+| `charts/*.html` | Individual chart files |
+
+---
+
+## 🔧 Module Details
+
+### Web Scraper (`scraper/`)
+
+- **Playwright-based** headless browser for JavaScript-rendered content
+- Async/await for efficient concurrent scraping
+- Rate limiting to respect server resources
+- Automatic pagination handling
+- Robust error handling and retry logic
+
+### Data Cleaner (`cleaning/data_cleaner.py`)
+
+- European price format parsing (`88,99 €` → `88.99`)
+- Availability status standardization
+- Missing value handling with configurable strategies
+- Duplicate detection and removal
+- Automatic price categorization (Budget/Mid-Range/Premium/Luxury)
+
+### Visualization (`visualization/charts.py`)
+
+- Price distribution histogram with statistics
+- Price by availability box plots
+- Price category bar charts
+- Availability pie/donut charts
+- Combined interactive dashboard
+
+#### Terminal Dashboard Mode
+The project also includes a retro-style terminal dashboard for CLI enthusiasts:
+
+![Terminal Dashboard](assets/dashboard_terminal.png)
+
+---
+
+## 📈 Power BI Integration
+
+The `products_powerbi.csv` file is formatted for seamless Power BI import:
+
+1. Open Power BI Desktop
+2. Click **Get Data** → **Text/CSV**
+3. Select `data/products_powerbi.csv`
+4. Data types will be auto-detected
+
+---
+
+## 🛠️ Technologies
+
+- **Python 3.9+**
+- **Playwright** - Browser automation for JS-rendered sites
+- **BeautifulSoup4** - HTML parsing
+- **Requests** - HTTP client
+- **Pandas** - Data manipulation
+- **Plotly Express** - Interactive visualizations
+- **Jinja2** - HTML templating
+
+---
+
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+<p align="center">
+  <b>Made by Simone</b> • Student Project • 2024
+</p>
+</file>
+
+</files>

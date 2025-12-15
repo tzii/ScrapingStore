@@ -1,5 +1,7 @@
 # Python
 __pycache__/
+.env
+.pytest_cache/
 *.py[cod]
 *$py.class
 *.so
@@ -35,6 +37,7 @@ env/
 
 # Generated data files
 data/*.csv
+data/*.db
 data/*.html
 data/*.log
 data/charts/
@@ -52,3 +55,4 @@ Thumbs.db
 
 # Playwright
 playwright/.cache/
+CODE_REVIEW.md

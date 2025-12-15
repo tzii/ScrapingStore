@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scrapingstore"
+version = "1.0.0"
+description = "A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration."
+authors = [
+    {name = "Simone", email = "simone@example.com"},
+]
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = [
+    "requests",
+    "beautifulsoup4",
+    "playwright",
+    "pandas",
+    "plotly",
+    "jinja2",
+    "sqlmodel==0.0.14",
+    "pydantic>=2.0",
+    "typer",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "flake8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

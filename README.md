@@ -112,6 +112,26 @@ python main.py --all
 python main.py --pages 10 --delay 2.0
 ```
 
+
+### Configuration
+
+You can configure the scraper using a `.env` file (copy from `.env.example` if available) or environment variables:
+
+```bash
+BASE_URL="https://sandbox.oxylabs.io/products"
+MAX_RETRIES=3
+DEFAULT_TIMEOUT=30
+DB_NAME="products.db"
+```
+
+### Running Tests
+
+To ensure everything is working correctly:
+
+```bash
+pytest
+```
+
 ---
 
 ## 📊 Output Files

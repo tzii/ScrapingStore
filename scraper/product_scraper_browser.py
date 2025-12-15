@@ -1,219 +1,148 @@
 """
-Playwright-based Product Scraper
-=================================
-Scraper for JavaScript-rendered sites like Oxylabs sandbox.
-
-This uses Playwright to render JavaScript and extract prices that
-are not available in the static HTML.
+Browser Product Scraper
+=======================
+Uses Playwright for dynamic scraping with true concurrency.
 """
 
 import asyncio
-import logging
-from typing import Optional
+from typing import List, Optional
+from playwright.async_api import async_playwright, Page, BrowserContext
 
-import pandas as pd
-from playwright.async_api import async_playwright, Page
+from scraper.base import BaseScraper
+from models import Product
+from logger import get_logger
+from config import DEFAULT_TIMEOUT, USER_AGENT_FALLBACK
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
+class BrowserScraper(BaseScraper):
+    def scrape(self, max_pages: Optional[int] = None) -> List[Product]:
+        """
+        Entry point that runs the async event loop.
+        """
+        return asyncio.run(self._scrape_async(max_pages))
 
-async def scrape_page_with_browser(page: Page, url: str) -> list[dict]:
-    """
-    Scrape a single page using Playwright browser.
-    
-    Args:
-        page: Playwright Page object
-        url: URL to scrape
+    async def _scrape_async(self, max_pages: Optional[int]) -> List[Product]:
+        logger.info(f"Starting browser scrape of {self.base_url}")
         
-    Returns:
-        List of product dictionaries
-    """
-    logger.info(f"Scraping (browser): {url}")
-    
-    await page.goto(url, wait_until='networkidle', timeout=30000)
-    
-    # Wait for product cards to load
-    await page.wait_for_selector('a.card-header', timeout=10000)
-    
-    products = []
-    
-    # Use JavaScript to extract product data directly from the DOM
-    # This is more reliable than Playwright element queries for complex text
-    products_data = await page.evaluate('''() => {
-        const products = [];
-        const cards = document.querySelectorAll('a.card-header');
-        
-        cards.forEach(card => {
-            const h4 = card.querySelector('h4');
-            const name = h4 ? h4.textContent.trim() : null;
+        async with async_playwright() as p:
+            # Launch browser
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(user_agent=USER_AGENT_FALLBACK)
             
-            if (!name || name === 'Video Games to scrape') return;
+            all_products = []
+            page_num = 1
+            consecutive_empty = 0
+            # Limit concurrency to 3 to be polite but faster than serial
+            semaphore = asyncio.Semaphore(3) 
             
-            // Get the parent container that might have the price
-            let container = card.parentElement;
-            for (let i = 0; i < 5; i++) {
-                if (container && container.textContent && container.textContent.includes('€')) {
-                    break;
-                }
-                if (container.parentElement) {
-                    container = container.parentElement;
-                }
-            }
-            
-            // Get full text from the container
-            const fullText = container ? container.textContent : card.textContent;
-            
-            // Extract price - look for XX,XX € pattern
-            const priceMatch = fullText.match(/(\\d{1,3}[,\\.]\\d{2})\\s*€/);
-            const price = priceMatch ? priceMatch[0] : null;
-            
-            // Extract availability
-            let availability = 'Unknown';
-            if (fullText.includes('Out of Stock')) {
-                availability = 'Out of Stock';
-            } else if (fullText.includes('In stock') || fullText.includes('Add to Basket')) {
-                availability = 'In Stock';
-            }
-            
-            // Get image
-            const img = card.querySelector('img');
-            const imageUrl = img ? (img.getAttribute('src') || null) : null;
-            
-            products.push({
-                name: name,
-                price: price,
-                availability: availability,
-                image_url: imageUrl
-            });
-        });
-        
-        return products;
-    }''')
-    
-    products = products_data if products_data else []
-    logger.info(f"Extracted {len(products)} products from {url}")
-    return products
+            # We must loop to allow stopping early
+            while True:
+                if max_pages and page_num > max_pages:
+                    break
 
-
-async def scrape_all_pages_async(
-    base_url: str = "https://sandbox.oxylabs.io/products",
-    max_pages: Optional[int] = None,
-    delay_seconds: float = 1.0
-) -> list[dict]:
-    """
-    Scrape all pages asynchronously using Playwright.
-    
-    Args:
-        base_url: Base URL of products listing
-        max_pages: Maximum pages to scrape (None for all)
-        delay_seconds: Delay between pages
-        
-    Returns:
-        List of all products
-    """
-    logger.info(f"Starting browser-based scrape of {base_url}")
-    logger.info(f"Max pages: {max_pages}, Delay: {delay_seconds}s")
-    
-    all_products = []
-    
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        )
-        page = await context.new_page()
-        
-        page_num = 1
-        consecutive_empty = 0
-        max_consecutive_empty = 3
-        
-        while True:
-            if max_pages and page_num > max_pages:
-                logger.info(f"Reached max pages limit ({max_pages})")
-                break
-            
-            url = f"{base_url}?page={page_num}" if page_num > 1 else base_url
-            
-            try:
-                products = await scrape_page_with_browser(page, url)
+                # Create a batch of tasks (e.g., 3 pages at a time) to run concurrently
+                # but ensure we can check the results of this batch before launching the next 100
+                batch_size = 3
+                tasks = []
                 
-                if not products:
-                    consecutive_empty += 1
-                    logger.warning(f"No products found on page {page_num}")
-                    if consecutive_empty >= max_consecutive_empty:
-                        logger.info("Stopping: multiple consecutive empty pages")
+                # Prepare batch
+                current_batch_pages = []
+                for i in range(batch_size):
+                    if max_pages and (page_num + i) > max_pages:
+                        break
+                    p_idx = page_num + i
+                    url = f"{self.base_url}?page={p_idx}" if p_idx > 1 else self.base_url
+                    tasks.append(self._scrape_single_page(context, url, semaphore))
+                    current_batch_pages.append(p_idx)
+                
+                if not tasks:
+                    break
+                
+                # Run batch
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Process results
+                batch_has_products = False
+                for res in results:
+                    if isinstance(res, list):
+                        if res:
+                            all_products.extend(res)
+                            batch_has_products = True
+                        # Loop logic for empty check:
+                        # If a page was empty, we shouldn't necessarily stop immediately if parallel pages had content,
+                        # but if the WHOLE batch is empty, that's a strong signal.
+                        # The user asked for "Stop after N empty pages".
+                        # For simplicity in concurrent mode: if the entire batch yields 0 products, we count it.
+                    else:
+                        logger.error(f"Page error: {res}")
+
+                if not batch_has_products:
+                    consecutive_empty += 1 # We count batches as units here for simplicity
+                    if consecutive_empty >= 2: # Stop after 2 empty batches (~6 pages)
+                        logger.info("Stopping: Consecutive empty batches.")
                         break
                 else:
                     consecutive_empty = 0
-                    all_products.extend(products)
-                    logger.info(f"Total products so far: {len(all_products)}")
                 
-                page_num += 1
+                # Advance page counter
+                page_num += len(tasks)
                 
-                if delay_seconds > 0:
-                    await asyncio.sleep(delay_seconds)
-                    
+                # Respect Delay between batches
+                if self.delay > 0:
+                    await asyncio.sleep(self.delay)
+            
+            await browser.close()
+            
+            logger.info(f"Browser scrape complete. Total products: {len(all_products)}")
+            return all_products
+
+    async def _scrape_single_page(self, context: BrowserContext, url: str, semaphore: asyncio.Semaphore) -> List[Product]:
+        async with semaphore:
+            page = await context.new_page()
+            products = []
+            try:
+                logger.info(f"Scraping {url}...")
+                await page.goto(url, timeout=DEFAULT_TIMEOUT * 1000, wait_until='domcontentloaded')
+                
+                # Use Playwright Locators instead of JS injection
+                # Tightened selector: removed generic 'css-' class match
+                cards = page.locator('div.product-card')
+                count = await cards.count()
+                
+                if count == 0:
+                    logger.warning(f"No products on {url}")
+                    return []
+
+                for i in range(count):
+                    card = cards.nth(i)
+                    try:
+                        name_el = card.locator('h4')
+                        if await name_el.count() == 0: continue
+                        
+                        name = await name_el.inner_text()
+                        
+                        # Get raw text for cleaning later
+                        text = await card.inner_text()
+                        
+                        # Image
+                        img_el = card.locator('img')
+                        img_src = await img_el.get_attribute('src') if await img_el.count() > 0 else None
+                        
+                        products.append(Product(
+                            name=name,
+                            source_url=url,
+                            price=0.0, # Placeholder
+                            availability=text, # Placeholder containing raw text
+                            image_url=img_src
+                        ))
+                    except Exception as e:
+                        continue
+                        
             except Exception as e:
-                logger.error(f"Error on page {page_num}: {e}")
-                consecutive_empty += 1
-                page_num += 1
-                if consecutive_empty >= max_consecutive_empty:
-                    break
-        
-        await browser.close()
-    
-    logger.info(f"Browser scraping complete. Total products: {len(all_products)}")
-    return all_products
-
-
-def scrape_products_browser(
-    base_url: str = "https://sandbox.oxylabs.io/products",
-    max_pages: Optional[int] = None,
-    delay_seconds: float = 0.5,
-    save_raw: bool = True,
-    output_path: str = "data/products_raw.csv"
-) -> pd.DataFrame:
-    """
-    Main entry point - scrape products using Playwright browser.
-    
-    Args:
-        base_url: Base URL for products
-        max_pages: Max pages to scrape (None for all ~94 pages)
-        delay_seconds: Delay between page requests
-        save_raw: Whether to save raw CSV
-        output_path: Path for raw CSV output
-        
-    Returns:
-        DataFrame with scraped products
-    """
-    # Run async scraper
-    all_products = asyncio.run(
-        scrape_all_pages_async(base_url, max_pages, delay_seconds)
-    )
-    
-    # Create DataFrame
-    df = pd.DataFrame(all_products)
-    
-    if not df.empty:
-        df['scraped_at'] = pd.Timestamp.now()
-        df['source_url'] = base_url
-    
-    # Save if requested
-    if save_raw and not df.empty:
-        import os
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        df.to_csv(output_path, index=False, encoding='utf-8')
-        logger.info(f"Raw data saved to {output_path}")
-    
-    return df
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    
-    # Test scrape 2 pages
-    df = scrape_products_browser(max_pages=2)
-    print(f"\nScraped {len(df)} products")
-    if not df.empty:
-        print("\nSample:")
-        print(df.head())
+                logger.error(f"Failed to scrape {url}: {e}")
+                raise e
+            finally:
+                await page.close()
+            
+            return products
