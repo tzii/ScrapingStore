@@ -4,9 +4,11 @@ from pathlib import Path
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 
+from typing import List
+from models import Product
 from config import TEMPLATES_DIR, DATA_DIR
 
-def generate_terminal_dashboard(products):
+def generate_terminal_dashboard(products: List[Product]):
     """
     Generates the retro terminal-style HTML dashboard.
     """

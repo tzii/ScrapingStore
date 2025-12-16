@@ -32,6 +32,21 @@ A complete end-to-end data engineering portfolio project demonstrating web scrap
 
 ---
 
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    User[User] --> CLI[CLI (main.py)]
+    CLI --> Scraper[Scraper Module]
+    Scraper -->|Raw HTML| Cleaner[Cleaner Module]
+    Cleaner -->|Product Objects| DB[Database (SQLModel)]
+    DB -->|Query| Dashboard[Dashboard Generator]
+    DB -->|Export| CSV[CSV File]
+    Dashboard -->|HTML| Browser[Browser View]
+```
+
+---
+
 ## 🎯 Project Overview
 
 This project scrapes product data from the [Oxylabs Sandbox E-commerce](https://sandbox.oxylabs.io/products) website and processes it through a complete data pipeline:

@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  scraper:
+    build: .
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DB_URL=sqlite:////app/data/products.db
+    # Keep the container running if needed, or just let it run one-off commands
+    # To run interactively: docker-compose run scraper
