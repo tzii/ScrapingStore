@@ -11,6 +11,8 @@
 
 A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration.
 
+### 🚀 **[Live Demo](https://tizzij.github.io/Scrape/)** | **[Terminal View](https://tizzij.github.io/Scrape/dashboard_terminal.html)**
+
 ## 📸 Dashboard Preview
 
 ![Modern Dashboard](assets/dashboard_modern.png)
@@ -210,5 +212,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  <b>Made by Simone</b> • Student Project • 2024
+  <b>Made by Simone</b> • Student Project • 2025
 </p>

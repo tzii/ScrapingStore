@@ -56,3 +56,5 @@ Thumbs.db
 # Playwright
 playwright/.cache/
 CODE_REVIEW.md
+*.xml
+*.log

@@ -9,6 +9,10 @@ from typing import Optional
 from enum import Enum
 import time
 
+from models import Product
+
+from visualization.dashboard_generator import generate_dashboard
+from visualization.terminal_dashboard_generator import generate_terminal_dashboard
 from config import BASE_URL
 from logger import setup_logger, get_logger
 from database import DatabaseManager
@@ -83,6 +87,13 @@ def scrape(
         logger.info("Generating dashboard...")
         # We pass the DB manager to the dashboard generator so it can query stats
         generate_dashboard(db)
+        if cleaned_products:
+             generate_terminal_dashboard(cleaned_products)
+        else:
+             # If no new products, try to get from DB for terminal dashboard
+             # Note: generate_terminal_dashboard expects a list of Product objects.
+             # We might need to fetch them if cleaned_products is empty but DB has data.
+             pass
 
     duration = time.time() - start_time
     logger.info(f"Pipeline completed in {duration:.2f} seconds.")
@@ -102,6 +113,27 @@ def generate_report():
     """
     db = DatabaseManager()
     generate_dashboard(db)
+    
+    # Also generate terminal dashboard
+    try:
+        df = db.get_products_df()
+        if not df.empty:
+            # Convert DataFrame back to Product objects for the generator
+            # We use the same cleaning logic helper or manual conversion
+            products = []
+            from models import Product # Ensure imported
+            # Handle potential NaN values which Pydantic might dislike if fields are non-optional
+            # But our Product model should handle it or we use the cleaned dict
+            records = df.to_dict(orient='records')
+            for record in records:
+                # Filter out keys that might not be in Product model if any
+                # For now assume 1:1 mapping as it comes from DB
+                products.append(Product(**record))
+            
+            generate_terminal_dashboard(products)
+            logger.info("Terminal dashboard generated.")
+    except Exception as e:
+        logger.warning(f"Could not generate terminal dashboard from DB: {e}")
 
 if __name__ == "__main__":
     import sys
