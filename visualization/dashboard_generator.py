@@ -64,12 +64,13 @@ def generate_dashboard(
         "Pokemon",
         "Final Fantasy",
     ]
-    franchise_data = []
+    from typing import Dict, Any, List
+    franchise_data: List[Dict[str, Any]] = []
     for key in keywords:
         count = len(df[df["name"].str.contains(key, case=False)])
         if count > 0:
             franchise_data.append({"name": key, "count": count})
-    franchise_data.sort(key=lambda x: x["count"], reverse=True)
+    franchise_data.sort(key=lambda x: int(x["count"]), reverse=True)
 
     # 3. Price Distribution (Dynamic Bins)
     # create ~8 bins based on min-max

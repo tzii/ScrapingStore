@@ -84,7 +84,9 @@ def clean_products(products: List[Product]) -> List[Product]:
     # Handle NaN values (which break SQLModel validation for Optionals if passed as float('nan'))
     df = df.replace({np.nan: None})
 
+    from typing import cast, Dict, Any
     # Vectorized List Comprehension is already fast enough for this scale vs strict dict mapping
-    cleaned_products = [Product(**record) for record in df.to_dict(orient="records")]
+    records = cast(List[Dict[str, Any]], df.to_dict(orient="records"))
+    cleaned_products = [Product(**record) for record in records]
 
     return cleaned_products

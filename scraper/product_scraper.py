@@ -9,7 +9,7 @@ from typing import List, Optional
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from scraper.base import BaseScraper
 from models import Product
@@ -102,8 +102,14 @@ class StaticScraper(BaseScraper):
                     # Store raw strings temporarily; cleaner fixes them
                     price=0.0,
                     availability=text,
-                    image_url=card.find("img")["src"] if card.find("img") else None,
+                    image_url=None,
                 )
+                img_tag = card.find("img")
+                if isinstance(img_tag, Tag) and img_tag.has_attr("src"):
+                     src = img_tag["src"]
+                     if isinstance(src, str):
+                        p.image_url = src
+                
                 products.append(p)
             except Exception as e:
                 logger.warning(f"Failed to parse product on {url}: {e}")

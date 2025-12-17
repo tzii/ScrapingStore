@@ -19,6 +19,7 @@ from database import DatabaseManager
 from scraper.product_scraper import StaticScraper
 from scraper.product_scraper_browser import BrowserScraper
 from cleaning.data_cleaner import clean_products
+from scraper.base import BaseScraper
 
 # Import dashboard generator (will be implemented in Phase 6)
 from visualization.dashboard_generator import generate_dashboard
@@ -59,7 +60,9 @@ def scrape(
     db = DatabaseManager()
     db.init_db()
 
+
     # 2. Select Scraper
+    scraper: BaseScraper
     if type == ScraperType.static:
         scraper = StaticScraper(base_url=BASE_URL, delay=delay)
     else:

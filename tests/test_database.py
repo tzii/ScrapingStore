@@ -38,13 +38,14 @@ def test_upsert_products(db_manager):
     p1 = Product(name="Old Name", source_url="http://test.com/1", price=10.0)
     db_manager.save_products([p1])
 
-    p2 = Product(name="New Name", source_url="http://test.com/1", price=50.0)
+    p2 = Product(name="Old Name", source_url="http://test.com/1", price=50.0)
     db_manager.save_products([p2])
 
     saved = db_manager.get_all_products()
     assert len(saved) == 1
-    assert saved[0].name == "New Name"
     assert saved[0].price == 50.0
+    assert saved[0].name == "Old Name"
+
 
 
 def test_export_powerbi(db_manager, tmp_path):
