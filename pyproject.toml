@@ -11,7 +11,7 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "MIT"}
+license = "MIT"
 dependencies = [
     "requests",
     "beautifulsoup4",
@@ -37,6 +37,10 @@ dev = [
     "types-beautifulsoup4",
 ]
 
+[tool.setuptools.packages.find]
+include = ["scraper*", "cleaning*", "visualization*"]
+exclude = ["data*", "assets*", "tests*", "docs*"]
+
 [tool.isort]
 profile = "black"
 
@@ -48,3 +52,4 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
