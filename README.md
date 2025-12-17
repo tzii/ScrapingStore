@@ -11,7 +11,7 @@
 
 A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration.
 
-### 🚀 **[Live Demo](https://tizzij.github.io/Scrape/)** | **[Terminal View](https://tizzij.github.io/Scrape/dashboard_terminal.html)**
+### 🚀 **[Live Demo](https://tzii.github.io/ScrapingStore/)** | **[Terminal View](https://tzii.github.io/ScrapingStore/dashboard_terminal.html)**
 
 ## 📸 Dashboard Preview
 
@@ -61,9 +61,10 @@ This project scrapes product data from the [Oxylabs Sandbox E-commerce](https://
 ## 📁 Project Structure
 
 ```
-Scrape/
+ScrapingStore/
 ├── scraper/
 │   ├── __init__.py
+│   ├── base.py                     # Base scraper class
 │   ├── product_scraper.py          # BeautifulSoup scraper (static)
 │   └── product_scraper_browser.py  # Playwright scraper (dynamic JS)
 ├── cleaning/
@@ -73,14 +74,17 @@ Scrape/
 │   ├── __init__.py
 │   ├── charts.py                   # Plotly chart generators
 │   ├── dashboard_generator.py      # Modern dashboard template
-│   └── terminal_dashboard_generator.py # Retro terminal style dashboard
+│   ├── terminal_dashboard_generator.py
+│   └── templates/                  # Jinja2 HTML templates
+├── tests/                          # pytest test suite
+│   ├── test_scraper.py
+│   └── test_data_cleaner.py
 ├── data/                           # Output directory (gitignored)
-│   ├── products_raw.csv
-│   ├── products_cleaned.csv
-│   ├── products_powerbi.csv
-│   ├── dashboard.html
-│   └── charts/
-├── main.py                         # Pipeline orchestrator
+├── config.py                       # Centralized configuration
+├── database.py                     # SQLModel database manager
+├── models.py                       # Pydantic/SQLModel data models
+├── logger.py                       # Logging configuration
+├── main.py                         # CLI pipeline orchestrator
 ├── requirements.txt
 ├── LICENSE
 └── README.md

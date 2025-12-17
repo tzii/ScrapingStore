@@ -1,0 +1,33 @@
+[10:55:59] INFO     Starting pipeline using browser scraper...       main.py:52
+           INFO     Database initialized.                        database.py:24
+           INFO     Starting browser scrape of    product_scraper_browser.py:26
+                    https://sandbox.oxylabs.io/pr                              
+                    oducts                                                     
+[10:56:00] INFO     Scraping                     product_scraper_browser.py:105
+                    https://sandbox.oxylabs.io/p                               
+                    roducts...                                                 
+           INFO     Scraping                     product_scraper_browser.py:105
+                    https://sandbox.oxylabs.io/p                               
+                    roducts?page=2...                                          
+           INFO     Scraping                     product_scraper_browser.py:105
+                    https://sandbox.oxylabs.io/p                               
+                    roducts?page=3...                                          
+[10:56:03] INFO     Browser scrape complete.      product_scraper_browser.py:97
+                    Total products: 96                                         
+           INFO     Scraped 96 raw items.                            main.py:67
+           INFO     Cleaning 96 products...                  data_cleaner.py:22
+           INFO     Removed 0 duplicates.                    data_cleaner.py:71
+           INFO     Processed 96 products (Upsert).              database.py:56
+           INFO     Exporting data for Power BI...               database.py:74
+           INFO     Power BI export saved to                     database.py:94
+                    C:\Users\Simone\Documents\Code                             
+                    Projects\ScrapingStore\data\products_powerbi               
+                    .csv                                                       
+           INFO     Generating dashboard...                          main.py:87
+           INFO     Generating Sleek Dashboard...     dashboard_generator.py:17
+           INFO     Dashboard saved to               dashboard_generator.py:120
+                    C:\Users\Simone\Documents\Code                             
+                    Projects\ScrapingStore\data\dash                           
+                    board.html                                                 
+Terminal Dashboard generated at: C:\Users\Simone\Documents\Code Projects\ScrapingStore\data\dashboard_terminal.html
+           INFO     Pipeline completed in 3.68 seconds.              main.py:99

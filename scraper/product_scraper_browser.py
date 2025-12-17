@@ -105,6 +105,13 @@ class BrowserScraper(BaseScraper):
                 logger.info(f"Scraping {url}...")
                 await page.goto(url, timeout=DEFAULT_TIMEOUT * 1000, wait_until='domcontentloaded')
                 
+                # Wait for content to render
+                try:
+                    await page.wait_for_selector('div.product-card', timeout=5000)
+                except:
+                    # If timeout, we proceed to count (which will be 0)
+                    pass
+
                 # Use Playwright Locators instead of JS injection
                 # Tightened selector: removed generic 'css-' class match
                 cards = page.locator('div.product-card')

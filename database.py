@@ -33,11 +33,10 @@ class DatabaseManager:
         
         with Session(self.engine) as session:
             for product in products:
-                # Upsert Logic: Check if product exists by source_url
-                # Note: For high performance, use bulk operations or native SQL ON CONFLICT.
-                # Here, we do a simple check-then-update for compatibility/safety.
+                # Upsert Logic: Check if product exists by name (unique identifier)
+                # Note: source_url is the same for all products on a page, so we use name.
                 existing_product = session.exec(
-                    select(Product).where(Product.source_url == product.source_url)
+                    select(Product).where(Product.name == product.name)
                 ).first()
 
                 if existing_product:

@@ -5,12 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ScrapingStore Analytics</title>
-    
+
     <!-- OpenGraph Meta Tags -->
     <meta property="og:title" content="ScrapingStore Analytics" />
     <meta property="og:description" content="Live product data dashboard from Scrape Portfolio Project." />
-    <meta property="og:image" content="https://tizzij.github.io/Scrape/assets/dashboard_modern.png" />
-    <meta property="og:url" content="https://tizzij.github.io/Scrape/" />
+    <meta property="og:image" content="https://tzii.github.io/ScrapingStore/assets/dashboard_modern.png" />
+    <meta property="og:url" content="https://tzii.github.io/ScrapingStore/" />
     <meta name="twitter:card" content="summary_large_image" />
 
 
@@ -302,6 +302,23 @@
 
     <script>
         // --- Data Injection ---
+    </script>
+    <!-- Safe Data Injection -->
+    <script id="products-data" type="application/json">{{ products_json | safe }}</script>
+    <script id="franchise-data" type="application/json">{{ franchise_json | safe }}</script>
+    <script id="kpi-data" type="application/json">
+    {
+        "total": {{ kpi_total }},
+        "avg": "{{ kpi_avg }}",
+        "premium": {{ kpi_premium }},
+        "avail_pct": "{{ kpi_availability_pct }}",
+        "avail_label": "{{ kpi_availability_label }}"
+    }
+    </script>
+    <script id="chart-data" type="application/json">{{ chart_data_json | safe }}</script>
+
+    <script>
+        // --- Data Injection ---
         // Data is now loaded from script tags below to prevent XSS
         /*
         const productsData = {{ products_json | safe }};
@@ -458,7 +475,7 @@
                             {
                                 name: 'Price',
                                 width: '20%',
-                                formatter: (cell) => gridjs.html(`<span class="px-2 py-1 rounded ${isDark ? 'bg-white/5' : 'bg-gray-100'} font-mono text-xs">€${parseFloat(cell).toFixed(2)}</span>`)
+                                formatter: (cell) => gridjs.html(`<span class="px-2 py-1 rounded ${isDark ? 'bg-white/5' : 'bg-gray-100'} font-mono text-xs">€${parseFloat(cell || 0).toFixed(2)}</span>`)
                             },
                             {
                                 name: 'Status',
@@ -481,19 +498,7 @@
         }
     </script>
 
-    <!-- Safe Data Injection -->
-    <script id="products-data" type="application/json">{{ products_json | safe }}</script>
-    <script id="franchise-data" type="application/json">{{ franchise_json | safe }}</script>
-    <script id="kpi-data" type="application/json">
-    {
-        "total": {{ kpi_total }},
-        "avg": "{{ kpi_avg }}",
-        "premium": {{ kpi_premium }},
-        "avail_pct": "{{ kpi_availability_pct }}",
-        "avail_label": "{{ kpi_availability_label }}"
-    }
-    </script>
-    <script id="chart-data" type="application/json">{{ chart_data_json | safe }}</script>
+
 </body>
 
 </html>
