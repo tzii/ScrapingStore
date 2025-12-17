@@ -33,7 +33,10 @@ BASE_URL = os.getenv("BASE_URL", "https://sandbox.oxylabs.io/products")
 DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", 30))
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", 3))
 RETRY_BACKOFF = float(os.getenv("RETRY_BACKOFF", 0.5))
-USER_AGENT_FALLBACK = os.getenv("USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+USER_AGENT_FALLBACK = os.getenv(
+    "USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+)
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)

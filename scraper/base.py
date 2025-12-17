@@ -13,6 +13,7 @@ from config import BASE_URL
 
 logger = get_logger(__name__)
 
+
 class BaseScraper(ABC):
     def __init__(self, base_url: str = BASE_URL, delay: float = 1.0):
         self.base_url = base_url

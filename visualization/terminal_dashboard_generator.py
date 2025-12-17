@@ -1,4 +1,3 @@
-
 import json
 from pathlib import Path
 from datetime import datetime
@@ -7,6 +6,7 @@ from jinja2 import Environment, FileSystemLoader
 from typing import List
 from models import Product
 from config import TEMPLATES_DIR, DATA_DIR
+
 
 def generate_terminal_dashboard(products: List[Product]):
     """
@@ -20,7 +20,7 @@ def generate_terminal_dashboard(products: List[Product]):
     def json_serial(obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
-        raise TypeError (f"Type {type(obj)} not serializable")
+        raise TypeError(f"Type {type(obj)} not serializable")
 
     # Prepare data for template
     products_data = [p.dict() for p in products]
@@ -33,14 +33,14 @@ def generate_terminal_dashboard(products: List[Product]):
     # Render template
     context = {
         "products_json": products_json,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
-    
+
     html_content = template.render(context)
-    
+
     # Write output
     output_path = DATA_DIR / "dashboard_terminal.html"
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html_content)
-    
+
     print(f"Terminal Dashboard generated at: {output_path}")

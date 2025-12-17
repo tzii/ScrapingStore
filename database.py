@@ -14,6 +14,7 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class DatabaseManager:
     def __init__(self, db_url: str = DB_URL):
         self.engine = create_engine(db_url)
@@ -30,7 +31,7 @@ class DatabaseManager:
         """
         if not products:
             return
-        
+
         with Session(self.engine) as session:
             for product in products:
                 # Upsert Logic: Check if product exists by name (unique identifier)
@@ -50,7 +51,7 @@ class DatabaseManager:
                     session.add(existing_product)
                 else:
                     session.add(product)
-            
+
             session.commit()
             logger.info(f"Processed {len(products)} products (Upsert).")
 
@@ -60,7 +61,7 @@ class DatabaseManager:
             statement = select(Product)
             results = session.exec(statement).all()
             return list(results)
-    
+
     def get_products_df(self) -> pd.DataFrame:
         """Retrieve all products as a Pandas DataFrame."""
         products = self.get_all_products()
@@ -72,7 +73,7 @@ class DatabaseManager:
         """
         logger.info("Exporting data for Power BI...")
         df = self.get_products_df()
-        
+
         if df.empty:
             logger.warning("No data to export.")
             return
@@ -80,14 +81,16 @@ class DatabaseManager:
         # Power BI Transformations
         # 1. Clean column names
         df.columns = [
-            col.strip().replace(' ', '_').replace('-', '_').lower()
+            col.strip().replace(" ", "_").replace("-", "_").lower()
             for col in df.columns
         ]
-        
+
         # 2. ISO Dates
-        if 'scraped_at' in df.columns:
-            df['scraped_at'] = pd.to_datetime(df['scraped_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        if "scraped_at" in df.columns:
+            df["scraped_at"] = pd.to_datetime(df["scraped_at"]).dt.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
 
         # 3. Export with BOM for Excel/Power BI compatibility
-        df.to_csv(output_path, index=False, encoding='utf-8-sig')
+        df.to_csv(output_path, index=False, encoding="utf-8-sig")
         logger.info(f"Power BI export saved to {output_path}")

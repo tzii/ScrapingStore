@@ -19,15 +19,18 @@ from database import DatabaseManager
 from scraper.product_scraper import StaticScraper
 from scraper.product_scraper_browser import BrowserScraper
 from cleaning.data_cleaner import clean_products
+
 # Import dashboard generator (will be implemented in Phase 6)
 from visualization.dashboard_generator import generate_dashboard
 
 app = typer.Typer(help="ScrapingStore Data Pipeline CLI")
 logger = get_logger("main")
 
+
 class ScraperType(str, Enum):
     static = "static"
     browser = "browser"
+
 
 @app.callback()
 def setup(verbose: bool = False):
@@ -36,6 +39,7 @@ def setup(verbose: bool = False):
     """
     level = "DEBUG" if verbose else "INFO"
     setup_logger(level)
+
 
 @app.command()
 def scrape(
@@ -71,7 +75,7 @@ def scrape(
 
     # 4. Clean
     cleaned_products = clean_products(raw_products)
-    
+
     # 5. Save to DB
     if cleaned_products:
         db.save_products(cleaned_products)
@@ -88,15 +92,16 @@ def scrape(
         # We pass the DB manager to the dashboard generator so it can query stats
         generate_dashboard(db)
         if cleaned_products:
-             generate_terminal_dashboard(cleaned_products)
+            generate_terminal_dashboard(cleaned_products)
         else:
-             # If no new products, try to get from DB for terminal dashboard
-             # Note: generate_terminal_dashboard expects a list of Product objects.
-             # We might need to fetch them if cleaned_products is empty but DB has data.
-             pass
+            # If no new products, try to get from DB for terminal dashboard
+            # Note: generate_terminal_dashboard expects a list of Product objects.
+            # We might need to fetch them if cleaned_products is empty but DB has data.
+            pass
 
     duration = time.time() - start_time
     logger.info(f"Pipeline completed in {duration:.2f} seconds.")
+
 
 @app.command()
 def export():
@@ -106,6 +111,7 @@ def export():
     db = DatabaseManager()
     db.export_for_powerbi()
 
+
 @app.command()
 def generate_report():
     """
@@ -113,7 +119,7 @@ def generate_report():
     """
     db = DatabaseManager()
     generate_dashboard(db)
-    
+
     # Also generate terminal dashboard
     try:
         df = db.get_products_df()
@@ -121,22 +127,25 @@ def generate_report():
             # Convert DataFrame back to Product objects for the generator
             # We use the same cleaning logic helper or manual conversion
             products = []
-            from models import Product # Ensure imported
+            from models import Product  # Ensure imported
+
             # Handle potential NaN values which Pydantic might dislike if fields are non-optional
             # But our Product model should handle it or we use the cleaned dict
-            records = df.to_dict(orient='records')
+            records = df.to_dict(orient="records")
             for record in records:
                 # Filter out keys that might not be in Product model if any
                 # For now assume 1:1 mapping as it comes from DB
                 products.append(Product(**record))
-            
+
             generate_terminal_dashboard(products)
             logger.info("Terminal dashboard generated.")
     except Exception as e:
         logger.warning(f"Could not generate terminal dashboard from DB: {e}")
 
+
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) == 1:
         # Default to 'scrape' command if no args provided
         sys.argv.append("scrape")
