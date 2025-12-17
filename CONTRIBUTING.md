@@ -4,7 +4,7 @@ Thank you for your interest in contributing!
 
 ## Code Style
 - We use `black` for formatting.
-- we use `flake8` for linting.
+- We use `flake8` for linting.
 - We use `mypy` for static type checking.
 
 ## Pull Requests

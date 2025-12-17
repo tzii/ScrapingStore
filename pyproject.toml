@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scrapingstore"
-version = "1.0.0"
+version = "1.1.0"
 description = "A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration."
 authors = [
-    {name = "Simone", email = "simone@example.com"},
+    {name = "Simone"},
 ]
 readme = "README.md"
 requires-python = ">=3.9"

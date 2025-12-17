@@ -45,9 +45,12 @@ data/charts/
 # Debug and temporary files
 debug*.html
 debug*.py
+debug_run.txt
 *_output.txt
 *_output_utf8.txt
 manual_log.txt
+scrape_error.log
+repomix-output.xml
 
 # OS files
 .DS_Store
