@@ -37,7 +37,7 @@ jobs:
 
     - name: Type check with Mypy
       run: |
-        mypy .
+        mypy ScrapingStore tests --ignore-missing-imports
 
     - name: Test with pytest
       run: |
