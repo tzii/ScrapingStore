@@ -41,6 +41,9 @@ dev = [
 include = ["scraper*", "cleaning*", "visualization*"]
 exclude = ["data*", "assets*", "tests*", "docs*"]
 
+[tool.setuptools]
+py-modules = ["models", "database", "config", "logger"]
+
 [tool.isort]
 profile = "black"
 
