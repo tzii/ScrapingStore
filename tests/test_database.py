@@ -47,7 +47,6 @@ def test_upsert_products(db_manager):
     assert saved[0].name == "Old Name"
 
 
-
 def test_export_powerbi(db_manager, tmp_path):
     p1 = Product(name="P1", source_url="u1", price=10)
     db_manager.save_products([p1])

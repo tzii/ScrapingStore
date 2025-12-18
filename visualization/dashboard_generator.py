@@ -65,6 +65,7 @@ def generate_dashboard(
         "Final Fantasy",
     ]
     from typing import Dict, Any, List
+
     franchise_data: List[Dict[str, Any]] = []
     for key in keywords:
         count = len(df[df["name"].str.contains(key, case=False)])

@@ -60,7 +60,6 @@ def scrape(
     db = DatabaseManager()
     db.init_db()
 
-
     # 2. Select Scraper
     scraper: BaseScraper
     if type == ScraperType.static:

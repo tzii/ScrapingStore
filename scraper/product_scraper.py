@@ -106,10 +106,10 @@ class StaticScraper(BaseScraper):
                 )
                 img_tag = card.find("img")
                 if isinstance(img_tag, Tag) and img_tag.has_attr("src"):
-                     src = img_tag["src"]
-                     if isinstance(src, str):
+                    src = img_tag["src"]
+                    if isinstance(src, str):
                         p.image_url = src
-                
+
                 products.append(p)
             except Exception as e:
                 logger.warning(f"Failed to parse product on {url}: {e}")

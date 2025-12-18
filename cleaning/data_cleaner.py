@@ -85,6 +85,7 @@ def clean_products(products: List[Product]) -> List[Product]:
     df = df.replace({np.nan: None})
 
     from typing import cast, Dict, Any
+
     # Vectorized List Comprehension is already fast enough for this scale vs strict dict mapping
     records = cast(List[Dict[str, Any]], df.to_dict(orient="records"))
     cleaned_products = [Product(**record) for record in records]
