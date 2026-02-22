@@ -8,7 +8,6 @@ from sqlmodel import SQLModel, create_engine, Session
 from database import DatabaseManager
 from models import Product
 
-
 SAMPLE_HTML = """
 <html>
     <body>

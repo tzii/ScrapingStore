@@ -43,9 +43,7 @@ _STOP_WORDS = {
 }
 
 
-def _detect_franchises(
-    df: pd.DataFrame, top_n: int = 8
-) -> List[Dict[str, Any]]:
+def _detect_franchises(df: pd.DataFrame, top_n: int = 8) -> List[Dict[str, Any]]:
     """
     Auto-detect product franchises by finding the most common
     significant words across all product names.

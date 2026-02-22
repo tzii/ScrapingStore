@@ -85,7 +85,9 @@ def test_clean_multiple_products(sample_products):
     """Test cleaning a batch of multiple products."""
     cleaned = clean_products(sample_products)
     assert len(cleaned) == 3
-    assert all(p.availability in ("In Stock", "Out of Stock", "Unknown") for p in cleaned)
+    assert all(
+        p.availability in ("In Stock", "Out of Stock", "Unknown") for p in cleaned
+    )
 
 
 def test_clean_handles_zero_price():

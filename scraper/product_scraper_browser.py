@@ -31,9 +31,7 @@ class BrowserScraper(BaseScraper):
             import concurrent.futures
 
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(
-                    asyncio.run, self._scrape_async(max_pages)
-                ).result()
+                return pool.submit(asyncio.run, self._scrape_async(max_pages)).result()
         return asyncio.run(self._scrape_async(max_pages))
 
     @staticmethod
