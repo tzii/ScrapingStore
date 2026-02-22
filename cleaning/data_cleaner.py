@@ -4,7 +4,7 @@ Data Cleaner Module
 Vectorized data cleaning pipeline using Pandas.
 """
 
-from typing import List
+from typing import List, Dict, Any, cast
 import pandas as pd
 import numpy as np
 from models import Product
@@ -16,78 +16,49 @@ logger = get_logger(__name__)
 def clean_products(products: List[Product]) -> List[Product]:
     """
     Clean a list of Product objects using vectorized Pandas operations.
+
+    Handles both pre-extracted data (price/availability already parsed by
+    the scraper) and legacy raw data where price may still need extraction.
     """
     if not products:
         return []
 
     logger.info(f"Cleaning {len(products)} products...")
 
-    # Convert to DataFrame
     df = pd.DataFrame([p.model_dump() for p in products])
 
-    # 1. Clean Price
-    # Extract price using regex from 'availability' column if 'price' is 0
-    # (Since scrapers put raw text in 'availability' temporarily)
-    # Pattern: XX,XX € or XX.XX €
-
-    # 1. Clean Price
-    # Extract price only if it's missing or zero
-    if "availability" in df.columns:
-        # Create a mask for rows where price is 0 or NaN
-        if "price" not in df.columns:
-            df["price"] = 0.0
-
-        mask_price_invalid = pd.to_numeric(df["price"], errors="coerce").fillna(0) <= 0
-
-        if mask_price_invalid.any():
-            price_pattern = r"(\d{1,3}(?:[.,]\d{2})?)\s*€"
-            extracted_price = df.loc[mask_price_invalid, "availability"].str.extract(
-                price_pattern
-            )[0]
-
-            # Normalize decimal separator
-            extracted_price = extracted_price.str.replace(",", ".", regex=False)
-
-            # Update only invalid prices
-            df.loc[mask_price_invalid, "price"] = pd.to_numeric(
-                extracted_price, errors="coerce"
-            ).fillna(0.0)
-    elif "price" not in df.columns:
+    # 1. Ensure price column exists and fill missing values
+    if "price" not in df.columns:
         df["price"] = 0.0
 
-    # 2. Clean Availability
-    # "In Stock", "Out of Stock", "Unknown"
-    # Case insensitive search
-    df["availability_clean"] = "Unknown"
+    df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(0.0)
 
-    text_col = df["availability"].str.lower()
-    df.loc[
-        text_col.str.contains("in stock|add to basket", na=False), "availability_clean"
-    ] = "In Stock"
-    df.loc[
-        text_col.str.contains("out of stock|unavailable", na=False),
-        "availability_clean",
-    ] = "Out of Stock"
+    # 2. Normalize availability to standard values
+    if "availability" in df.columns:
+        text_col = df["availability"].str.lower()
+        conditions = [
+            text_col.str.contains("in stock|add to basket", na=False),
+            text_col.str.contains("out of stock|unavailable", na=False),
+        ]
+        choices = ["In Stock", "Out of Stock"]
+        df["availability"] = np.select(conditions, choices, default="Unknown")
+    else:
+        df["availability"] = "Unknown"
 
-    df["availability"] = df["availability_clean"]
-    df.drop(columns=["availability_clean"], inplace=True)
-
-    # 3. Clean Name
+    # 3. Clean name
     df["name"] = df["name"].str.strip()
 
-    # 4. Deduplicate (by name)
+    # 4. Deduplicate by name
     initial_count = len(df)
     df.drop_duplicates(subset=["name"], keep="first", inplace=True)
-    logger.info(f"Removed {initial_count - len(df)} duplicates.")
+    removed = initial_count - len(df)
+    if removed > 0:
+        logger.info(f"Removed {removed} duplicates.")
 
     # Convert back to Product objects
-    # Handle NaN values (which break SQLModel validation for Optionals if passed as float('nan'))
     df = df.replace({np.nan: None})
-
-    from typing import cast, Dict, Any
-
-    # Vectorized List Comprehension is already fast enough for this scale vs strict dict mapping
     records = cast(List[Dict[str, Any]], df.to_dict(orient="records"))
     cleaned_products = [Product(**record) for record in records]
 
+    logger.info(f"Cleaning complete: {len(cleaned_products)} products ready.")
     return cleaned_products

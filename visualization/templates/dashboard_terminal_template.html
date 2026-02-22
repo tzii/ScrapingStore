@@ -1,332 +1,288 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SCRAPE_STORE // v.3.0</title>
+    <title>SCRAPESTORE // TERMINAL v4.0</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0c0c0c;
-            --term-green: #00ff41;
-            --term-amber: #ffb000;
-            --term-cyan: #00f3ff;
-            --term-dim: #444;
-            --border: #333;
-            --font: 'Fira Code', monospace;
+            --bg: #030303;
+            --panel: #060806;
+            --border: #1a2e1a;
+            --green: #33ff66;
+            --green-dim: #1a3a1a;
+            --green-glow: rgba(51,255,102,0.35);
+            --amber: #ff9f1c;
+            --cyan: #0ef6cc;
+            --red: #ff3333;
+            --dim: #3a4a3a;
+            --text: #88aa88;
+            --font: 'IBM Plex Mono', monospace;
         }
-
-        * {
-            box-sizing: border-box;
-            scrollbar-width: thin;
-            scrollbar-color: var(--term-dim) var(--bg);
-        }
-
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; overflow: hidden; }
         body {
-            background-color: var(--bg);
-            color: #ccc;
+            background: var(--bg);
+            color: var(--text);
             font-family: var(--font);
-            margin: 0;
-            height: 100vh;
-            overflow: hidden;
+            font-size: 12px;
             display: flex;
             flex-direction: column;
-            font-size: 13px;
         }
 
-        .crt::before {
-            content: " ";
-            display: block;
-            position: absolute;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 900;
-            background-size: 100% 2px, 3px 100%;
+        /* CRT warm-up */
+        @keyframes warmup {
+            0% { opacity: 0; filter: brightness(0) saturate(0); }
+            40% { opacity: 1; filter: brightness(0.3) saturate(0.5); }
+            100% { opacity: 1; filter: brightness(1) saturate(1); }
+        }
+        body { animation: warmup 2s ease-out forwards; }
+
+        /* Scanlines */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 9000;
             pointer-events: none;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 1px,
+                rgba(0,0,0,0.15) 1px,
+                rgba(0,0,0,0.15) 2px
+            );
+            animation: scanFadeIn 2.5s ease-out forwards;
+            opacity: 0;
+        }
+        @keyframes scanFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Vignette */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 8999;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.6) 100%);
         }
 
+        /* Blink */
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        .blink { animation: blink 1.2s step-end infinite; }
+        @keyframes flicker { 0%, 97%, 100% { opacity: 1; } 98% { opacity: 0.7; } 99% { opacity: 0.9; } }
+        .flicker { animation: flicker 4s infinite; }
+
+        /* Glow text */
+        .glow { color: var(--green); text-shadow: 0 0 6px var(--green-glow); }
+        .glow-cyan { color: var(--cyan); text-shadow: 0 0 6px rgba(14,246,204,0.3); }
+        .glow-amber { color: var(--amber); text-shadow: 0 0 6px rgba(255,159,28,0.3); }
+
+        /* Nav */
         nav {
             background: #000;
             border-bottom: 1px solid var(--border);
-            padding: 8px 15px;
+            padding: 6px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 12px;
             z-index: 1000;
+            flex-shrink: 0;
         }
-
-        .nav-brand {
-            color: var(--term-cyan);
-            font-weight: 700;
-            letter-spacing: 1px;
-        }
-
+        .nav-brand { font-weight: 700; letter-spacing: 1.5px; font-size: 11px; }
         .nav-link {
-            color: #666;
+            color: var(--dim);
             text-decoration: none;
-            margin-left: 15px;
+            margin-left: 12px;
+            font-size: 11px;
             transition: color 0.2s;
         }
+        .nav-link:hover { color: var(--cyan); text-shadow: 0 0 6px rgba(14,246,204,0.2); }
 
-        .nav-link:hover {
-            color: #fff;
-            text-decoration: underline;
-        }
-
-        .nav-status {
-            color: var(--term-green);
-        }
-
-        .blink {
-            animation: blink 1s step-end infinite;
-        }
-
-        @keyframes blink {
-            50% {
-                opacity: 0;
-            }
-        }
-
+        /* Grid layout */
         main {
             flex: 1;
             display: grid;
-            grid-template-columns: 280px 1fr 340px;
+            grid-template-columns: 240px 1fr 280px;
             grid-template-rows: 1fr 1fr;
             gap: 1px;
             background: var(--border);
             padding: 1px;
+            min-height: 0;
         }
 
+        /* Panels */
         .panel {
-            background: var(--bg);
-            position: relative;
+            background: var(--panel);
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative;
         }
-
-        .panel-header {
-            background: #1a1a1a;
-            padding: 8px 12px;
-            font-size: 11px;
-            color: #888;
+        .panel-hdr {
+            background: #0a110a;
+            padding: 6px 12px;
+            font-size: 10px;
+            color: var(--dim);
             border-bottom: 1px solid var(--border);
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
         }
-
-        .panel-content {
-            padding: 15px;
+        .panel-hdr .id { color: var(--cyan); margin-right: 6px; }
+        .panel-hdr .controls { color: #2a3a2a; }
+        .panel-body {
+            padding: 12px;
             flex: 1;
             overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--green-dim) var(--panel);
         }
 
-        .chart-row {
-            display: flex;
-            margin-bottom: 8px;
-            align-items: center;
-            font-size: 11px;
-        }
+        /* KPI */
+        .kpi { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed var(--border); }
+        .kpi:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .kpi-label { font-size: 9px; color: var(--dim); letter-spacing: 2px; margin-bottom: 4px; }
+        .kpi-val { font-size: 28px; font-weight: 700; line-height: 1; }
+        .kpi-sub { font-size: 10px; margin-top: 4px; }
 
-        .chart-label {
-            width: 80px;
-            color: #888;
-            text-align: right;
-            padding-right: 10px;
-        }
-
-        .chart-bar-container {
-            flex: 1;
-            display: flex;
-            align-items: center;
-        }
-
-        .chart-bar {
-            height: 14px;
-            background: var(--bg);
-            color: var(--term-cyan);
+        /* Chart */
+        .bar-row { display: flex; align-items: center; margin-bottom: 6px; font-size: 11px; }
+        .bar-label { width: 70px; text-align: right; padding-right: 8px; color: var(--dim); white-space: nowrap; }
+        .bar-track { flex: 1; height: 12px; position: relative; }
+        .bar-fill {
+            height: 100%;
+            color: var(--green);
+            font-family: var(--font);
             white-space: nowrap;
             overflow: hidden;
-            font-family: monospace;
+            transform-origin: left;
+            transform: scaleX(0);
         }
+        .bar-count { width: 36px; text-align: right; color: #ccc; font-size: 11px; margin-left: 6px; }
+        @keyframes barReveal { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
-        .chart-value {
-            margin-left: 8px;
-            color: #fff;
-        }
-
-        .fran-item {
+        /* Franchise */
+        .fran-row {
             display: flex;
-            justify-content: space-between;
-            padding: 6px 0;
-            border-bottom: 1px dashed #333;
-            font-size: 12px;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px dashed #1a2a1a;
+            font-size: 11px;
+            transition: border-color 0.2s;
         }
+        .fran-row:hover { border-left: 2px solid var(--cyan); padding-left: 6px; }
+        .fran-row:last-child { border-bottom: none; }
+        .fran-marker { color: var(--dim); margin-right: 6px; }
+        .fran-name { flex: 1; }
+        .fran-dots { flex: 1; overflow: hidden; color: #1a2a1a; font-size: 10px; white-space: nowrap; margin: 0 6px; }
+        .fran-count { color: #ccc; }
 
-        .fran-name {
-            color: var(--term-amber);
-        }
+        /* Log */
+        .log-line { font-size: 11px; padding: 2px 0; padding-left: 6px; border-left: 2px solid transparent; }
+        .log-line:hover { border-left-color: var(--cyan); background: rgba(14,246,204,0.03); }
+        .log-ts { color: #2a3a2a; margin-right: 6px; }
+        .log-ok { color: var(--green); }
+        .log-price { color: var(--cyan); }
 
-        .fran-count {
-            color: #fff;
-        }
+        /* Status boot */
+        .boot-line { margin-bottom: 4px; font-size: 11px; opacity: 0; }
+        @keyframes typeIn { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: translateX(0); } }
+        .boot-tag { font-weight: 600; margin-right: 4px; }
+        .boot-ok { color: var(--green); font-weight: 600; float: right; }
 
-        .kpi-wrapper {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-
-        .kpi-box {
-            border: 1px solid var(--border);
-            padding: 15px;
-            text-align: center;
-        }
-
-        .kpi-title {
-            font-size: 10px;
-            color: #666;
-            margin-bottom: 5px;
-        }
-
-        .kpi-val {
-            font-size: 24px;
-            color: #fff;
-            font-weight: 700;
-        }
-
-        .kpi-sub {
-            font-size: 10px;
-            color: var(--term-green);
-            margin-top: 5px;
-        }
-
-        .log-line {
-            font-size: 12px;
-            padding: 3px 0;
-            border-left: 2px solid transparent;
-            padding-left: 6px;
-        }
-
-        .log-line:hover {
-            border-left-color: var(--term-cyan);
-            background: #111;
-        }
-
-        .log-ts {
-            color: #555;
-            margin-right: 8px;
-        }
-
-        .log-msg {
-            color: #aaa;
-        }
-
-        .log-success {
-            color: var(--term-green);
-        }
-
-        .col-span-2 {
-            grid-column: span 2;
-        }
-
-        .row-span-2 {
-            grid-row: span 2;
-        }
+        .col-span-2 { grid-column: span 2; }
+        .row-span-2 { grid-row: span 2; }
     </style>
 </head>
 
-<body class="crt">
+<body>
+    <!-- Nav -->
     <nav>
-        <div class="nav-brand">./TERMINAL_PF_V3</div>
         <div>
-            <a href="index.html" class="nav-link">[ GUI_MODE ]</a>
-            <span class="nav-status" style="margin-left: 15px;">SYSTEM_ONLINE <span class="blink">●</span></span>
+            <span class="glow-cyan nav-brand">▸ SCRAPESTORE_TERMINAL</span>
+            <span style="color:var(--dim); margin-left: 8px; font-size:10px;">v4.0</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px;">
+            <span style="color:var(--dim); font-size:10px;" id="nav-clock">--:--:--</span>
+            <a href="index.html" class="nav-link">[ DASHBOARD ]</a>
+            <span class="glow flicker" style="font-size:10px;">SYSTEM NOMINAL <span class="blink">●</span></span>
         </div>
     </nav>
 
     <main>
+        <!-- 01: Metrics -->
         <div class="panel row-span-2">
-            <div class="panel-header"><span>01_SYSTEM_METRICS</span><span>[X]</span></div>
-            <div class="panel-content">
-                <div class="kpi-wrapper" style="margin-top: 20px;">
-                    <div class="kpi-box">
-                        <div class="kpi-title">TOTAL_ITEMS</div>
-                        <div class="kpi-val" id="t-count">0</div>
-                        <div class="kpi-sub">▲ 100%</div>
-                    </div>
-                    <div class="kpi-box">
-                        <div class="kpi-title">AVG_PRICE</div>
-                        <div class="kpi-val" id="t-price">0.0</div>
-                        <div class="kpi-sub">EUR</div>
-                    </div>
+            <div class="panel-hdr"><span><span class="id">01</span>// METRICS</span><span class="controls">[─ □ ×]</span></div>
+            <div class="panel-body">
+                <div class="kpi">
+                    <div class="kpi-label">TOTAL_ITEMS</div>
+                    <div class="kpi-val glow" id="t-count">0</div>
+                    <div class="kpi-sub" style="color:var(--green);">▲ COMPLETE</div>
                 </div>
-                <!-- Availability KPI Addition -->
-                <div class="kpi-wrapper" style="margin-top: 15px;">
-                    <div class="kpi-box">
-                        <div class="kpi-title">IN_STOCK</div>
-                        <div class="kpi-val" id="t-stock">0%</div>
-                        <div class="kpi-sub" id="t-stock-label">CHECKING...</div>
-                    </div>
+                <div class="kpi">
+                    <div class="kpi-label">AVG_PRICE</div>
+                    <div class="kpi-val glow-cyan" id="t-price">0.00</div>
+                    <div class="kpi-sub" style="color:var(--dim);">EUR</div>
                 </div>
-
-                <div style="margin-top: 30px;">
-                    <div class="panel-header" style="background: transparent; padding-left: 0; margin-bottom: 10px;">
-                        TOP_FRANCHISES</div>
-                    <div id="franchise-list"></div>
+                <div class="kpi">
+                    <div class="kpi-label">STOCK_RATIO</div>
+                    <div class="kpi-val glow" id="t-stock">0%</div>
+                    <div class="kpi-sub" id="t-stock-label" style="color:var(--amber);">CHECKING</div>
                 </div>
             </div>
         </div>
 
+        <!-- 02: Price Analysis -->
         <div class="panel col-span-2">
-            <div class="panel-header"><span>02_DATA_VISUALIZATION.exe</span><span>[ _ □ X ]</span></div>
-            <div class="panel-content" style="display: flex; gap: 30px;">
-                <div style="flex: 1;">
-                    <div style="margin-bottom: 15px; color: var(--term-cyan);">>> PRICE_DISTRIBUTION_HISTOGRAM</div>
+            <div class="panel-hdr"><span><span class="id">02</span>// PRICE_ANALYSIS</span><span class="controls">[─ □ ×]</span></div>
+            <div class="panel-body" style="display:flex; gap:24px;">
+                <div style="flex:1;">
+                    <div class="glow-cyan" style="margin-bottom:12px; font-size:11px; letter-spacing:1px;">&gt;&gt; PRICE_DISTRIBUTION</div>
                     <div id="ascii-chart"></div>
                 </div>
-                <div style="width: 200px; border-left: 1px dashed #333; padding-left: 20px;">
-                    <div style="margin-bottom: 10px; color: var(--term-amber);">>> STATUS_REPORT</div>
-                    <div style="font-size: 11px; line-height: 1.6; color: #999;">
-                        Scrape complete.<br>
-                        <span id="rep-count">0/0</span> Items Processed.<br>
-                        0 Errors.<br>
-                        Data integrity: 100%.<br><br>
-                        Exporting to CSV... OK<br>
-                        Generating graph... OK
+                <div style="width:180px; border-left:1px dashed var(--border); padding-left:16px;">
+                    <div class="glow-amber" style="margin-bottom:10px; font-size:11px; letter-spacing:1px;">&gt;&gt; SUMMARY</div>
+                    <div style="font-size:11px; line-height:1.8;">
+                        <div style="color:var(--dim);">Min Price</div>
+                        <div class="glow-cyan" id="stat-min">—</div>
+                        <div style="color:var(--dim); margin-top:8px;">Max Price</div>
+                        <div class="glow-cyan" id="stat-max">—</div>
+                        <div style="color:var(--dim); margin-top:8px;">Median</div>
+                        <div class="glow-cyan" id="stat-med">—</div>
+                        <div style="color:var(--dim); margin-top:8px;">Std Dev</div>
+                        <div class="glow-cyan" id="stat-std">—</div>
                     </div>
                 </div>
             </div>
         </div>
 
+        <!-- 04: Catalog / Franchises -->
         <div class="panel">
-            <div class="panel-header"><span>03_EVENT_LOG</span><span>[↑↓]</span></div>
-            <div class="panel-content" id="log-feed" style="font-family: monospace;"></div>
+            <div class="panel-hdr"><span><span class="id">04</span>// CATALOG</span><span class="controls">[─ □ ×]</span></div>
+            <div class="panel-body" id="franchise-list"></div>
         </div>
 
+        <!-- 05: Event Log -->
         <div class="panel">
-            <div class="panel-header"><span>04_TERMINAL</span><span>[_]</span></div>
-            <div class="panel-content" style="padding: 0;">
-                <div style="padding: 10px; height: 100%; background: #000;">
-                    <div style="color: #666; margin-bottom: 10px;">Last login: {{ timestamp }} on ttys001</div>
-                    <div><span style="color: var(--term-green);">user@scrapestore</span>:<span
-                            style="color: var(--term-cyan);">~</span>$ ./analyze_data.py --verbose</div>
-                    <div style="color: #ccc; margin: 5px 0;">Running analysis routines...</div>
-                    <div style="color: #ccc;">> Calculating vectors... done</div>
-                    <div style="color: #ccc;">> Rendering ASCII... done</div>
-                    <br>
-                    <div><span style="color: var(--term-green);">user@scrapestore</span>:<span
-                            style="color: var(--term-cyan);">~</span>$ <span class="blink">█</span></div>
+            <div class="panel-hdr"><span><span class="id">05</span>// EVENT_LOG</span><span class="controls">[↑↓]</span></div>
+            <div class="panel-body" id="log-feed"></div>
+        </div>
+
+        <!-- 06: Terminal -->
+        <div class="panel">
+            <div class="panel-hdr"><span><span class="id">06</span>// TERMINAL</span><span class="controls">[_]</span></div>
+            <div class="panel-body" style="padding:0;">
+                <div style="padding:10px; height:100%; background:#010201;">
+                    <div style="color:var(--dim); margin-bottom:8px; font-size:10px;">Last login: {{ timestamp }} on ttys001</div>
+                    <div><span class="glow">user@scrapestore</span>:<span class="glow-cyan">~</span>$ python analyze.py --mode=deep</div>
+                    <div id="term-output" style="margin-top:6px;"></div>
+                    <div style="margin-top:8px;"><span class="glow">user@scrapestore</span>:<span class="glow-cyan">~</span>$ <span class="blink" style="color:var(--green);">█</span></div>
                 </div>
             </div>
         </div>
@@ -335,95 +291,144 @@
     <script id="products-data" type="application/json">{{ products_json | safe }}</script>
     <script>
         const products = JSON.parse(document.getElementById('products-data').textContent);
-
-        // KPI
         const total = products.length;
-        const avg = products.reduce((acc, p) => acc + p.price, 0) / (total || 1);
+        const prices = products.map(p => p.price).filter(p => p > 0).sort((a, b) => a - b);
+        const avg = prices.reduce((a, b) => a + b, 0) / (prices.length || 1);
         const inStock = products.filter(p => p.availability && p.availability.includes('In Stock')).length;
         const stockPct = total > 0 ? (inStock / total) * 100 : 0;
+        const minP = prices.length ? prices[0] : 0;
+        const maxP = prices.length ? prices[prices.length - 1] : 0;
+        const median = prices.length ? prices[Math.floor(prices.length / 2)] : 0;
+        const stdDev = Math.sqrt(prices.reduce((s, p) => s + Math.pow(p - avg, 2), 0) / (prices.length || 1));
 
-        document.getElementById('t-count').innerText = total;
-        document.getElementById('t-price').innerText = avg.toFixed(2);
-        document.getElementById('rep-count').innerText = `${total}/${total}`;
-        document.getElementById('t-stock').innerText = Math.round(stockPct) + "%";
-        document.getElementById('t-stock-label').innerText = stockPct > 50 ? "OPTIMAL" : "LOW";
+        // Clock
+        setInterval(() => {
+            document.getElementById('nav-clock').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+        }, 1000);
+
+        // KPI typing animation
+        function typeNumber(el, target, duration) {
+            const isFloat = String(target).includes('.');
+            const num = parseFloat(target);
+            if (isNaN(num)) { el.textContent = target; return; }
+            const start = performance.now();
+            function tick(now) {
+                const p = Math.min((now - start) / duration, 1);
+                const e = 1 - Math.pow(1 - p, 3);
+                el.textContent = isFloat ? (num * e).toFixed(2) : Math.round(num * e);
+                if (p < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+
+        setTimeout(() => {
+            typeNumber(document.getElementById('t-count'), total, 1200);
+            typeNumber(document.getElementById('t-price'), avg.toFixed(2), 1200);
+            typeNumber(document.getElementById('t-stock'), Math.round(stockPct) + '%', 800);
+            const label = document.getElementById('t-stock-label');
+            if (stockPct > 80) { label.textContent = 'NOMINAL'; label.style.color = 'var(--green)'; }
+            else if (stockPct > 50) { label.textContent = 'MODERATE'; label.style.color = 'var(--amber)'; }
+            else { label.textContent = 'CRITICAL'; label.style.color = 'var(--red)'; }
+        }, 2000);
+
+        // Stats
+        setTimeout(() => {
+            document.getElementById('stat-min').textContent = '€' + minP.toFixed(2);
+            document.getElementById('stat-max').textContent = '€' + maxP.toFixed(2);
+            document.getElementById('stat-med').textContent = '€' + median.toFixed(2);
+            document.getElementById('stat-std').textContent = '±' + stdDev.toFixed(2);
+        }, 2200);
 
         // ASCII Chart
-        const bins = [60, 70, 80, 85, 90, 95];
-        const counts = new Array(bins.length).fill(0);
-        products.forEach(p => {
-            if (p.price < 60) counts[0]++;
-            else if (p.price < 70) counts[1]++;
-            else if (p.price < 80) counts[2]++;
-            else if (p.price < 85) counts[3]++;
-            else if (p.price < 90) counts[4]++;
-            else counts[5]++;
-        });
-
+        const binCount = 6;
+        const binStep = Math.max(5, Math.ceil((maxP - minP) / binCount));
+        const bins = [];
+        for (let i = 0; i < binCount; i++) {
+            const lo = Math.floor(minP) + i * binStep;
+            const hi = lo + binStep;
+            const count = prices.filter(p => p >= lo && p < hi).length;
+            bins.push({ label: `${lo}-${hi}`, count });
+        }
+        const maxBin = Math.max(...bins.map(b => b.count), 1);
         const chartDiv = document.getElementById('ascii-chart');
-        counts.forEach((count, idx) => {
-            const range = bins[idx] ? `<${bins[idx]}` : `>${bins[idx - 1]}`;
-            const row = document.createElement('div');
-            row.className = 'chart-row';
-            const maxVal = Math.max(...counts);
-            const scale = maxVal > 50 ? 50 / maxVal : 1;
-            const numBlocks = Math.ceil(count * scale);
-            let bar = '█'.repeat(numBlocks);
-            if (count > (20 / scale)) bar += '▓▓'; else if (count > (10 / scale)) bar += '▒▒'; else bar += '░';
 
-            row.innerHTML = `<div class="chart-label">${range} €</div><div class="chart-bar-container"><div class="chart-bar" style="width: ${numBlocks * 10}px; max-width: 100%;">${bar}</div><div class="chart-value">${count}</div></div>`;
+        bins.forEach((bin, idx) => {
+            const row = document.createElement('div');
+            row.className = 'bar-row';
+            const pct = (bin.count / maxBin) * 100;
+            const blocks = Math.max(1, Math.round(pct / 3));
+            const bar = '█'.repeat(blocks);
+            row.innerHTML = `<div class="bar-label">${bin.label}€</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%; animation: barReveal 0.6s ease-out ${2.2 + idx * 0.12}s forwards;">${bar}</div></div><div class="bar-count">${bin.count}</div>`;
             chartDiv.appendChild(row);
         });
 
-        // Franchises
-        const keywords = ['Zelda', 'Mario', 'Metal Gear', 'Gran Turismo', 'Halo', 'Persona', 'Starcraft', 'Uncharted'];
-        const franchises = keywords.map(k => ({ name: k.toUpperCase(), count: products.filter(p => p.name.includes(k)).length })).sort((a, b) => b.count - a.count).slice(0, 5);
+        // Franchises (auto-detect)
+        const stopWords = new Set(['the','of','and','a','in','for','to','is','on','at','by','an','it','with','from','edition','game','video','new','pro','set','kit']);
+        const wordCounts = {};
+        products.forEach(p => {
+            p.name.split(/\s+/).forEach(w => {
+                const cleaned = w.replace(/[()[\]{}:,.\-!?]/g, '');
+                if (cleaned.length >= 3 && !stopWords.has(cleaned.toLowerCase())) {
+                    const key = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+                    wordCounts[key] = (wordCounts[key] || 0) + 1;
+                }
+            });
+        });
+        const franchises = Object.entries(wordCounts)
+            .filter(([, c]) => c > 1)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8);
+
         const franList = document.getElementById('franchise-list');
-        franchises.forEach(f => {
+        franchises.forEach(([name, count]) => {
             const row = document.createElement('div');
-            row.className = 'fran-item';
-            row.innerHTML = `<span class="fran-name">${f.name}</span> <span class="fran-count">[${f.count}]</span>`;
+            row.className = 'fran-row';
+            const dotsLen = Math.max(2, 30 - name.length - String(count).length);
+            const dots = '·'.repeat(dotsLen);
+            row.innerHTML = `<span class="fran-marker">▸</span><span class="fran-name glow-amber">${name.toUpperCase()}</span><span class="fran-dots">${dots}</span><span class="fran-count">[${count}]</span>`;
             franList.appendChild(row);
         });
 
-        // Log Feed - Optimized
+        // Event Log
         const logFeed = document.getElementById('log-feed');
         let logIdx = 0;
-
-        function processBatch() {
+        function processLogBatch() {
             if (logIdx >= products.length) return;
-
-            const fragment = document.createDocumentFragment();
-            // Process up to 50 items per frame
-            const batchSize = 50;
-            const end = Math.min(logIdx + batchSize, products.length);
-
+            const end = Math.min(logIdx + 30, products.length);
             for (let i = logIdx; i < end; i++) {
                 const p = products[i];
                 const div = document.createElement('div');
                 div.className = 'log-line';
                 const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-                div.innerHTML = `<span class="log-ts">[${time}]</span><span class="log-msg">Processed: ${p.name.substring(0, 20)}...</span><span class="log-success">OK (${p.price}€)</span>`;
-                // Prepend to top
-                if (logFeed.firstChild) {
-                    logFeed.insertBefore(div, logFeed.firstChild);
-                } else {
-                    logFeed.appendChild(div);
-                }
+                const truncName = p.name.length > 22 ? p.name.substring(0, 22) + '…' : p.name;
+                div.innerHTML = `<span class="log-ts">[${time}]</span> ${truncName} <span class="log-ok">OK</span> <span class="log-price">(€${p.price.toFixed(2)})</span>`;
+                if (logFeed.firstChild) logFeed.insertBefore(div, logFeed.firstChild);
+                else logFeed.appendChild(div);
             }
-
-            // Trim
-            while (logFeed.children.length > 50) logFeed.removeChild(logFeed.lastChild);
-
+            while (logFeed.children.length > 40) logFeed.removeChild(logFeed.lastChild);
             logIdx = end;
-
-            if (logIdx < products.length) {
-                requestAnimationFrame(processBatch);
-            }
+            if (logIdx < products.length) requestAnimationFrame(processLogBatch);
         }
+        setTimeout(() => requestAnimationFrame(processLogBatch), 2500);
 
-        requestAnimationFrame(processBatch);
+        // Terminal output
+        const termLines = [
+            { text: '▸ Loading dataset... done (' + total + ' records)', delay: 2200 },
+            { text: '▸ Computing statistics... done', delay: 2600 },
+            { text: '▸ Rendering visualization... done', delay: 3000 },
+            { text: '▸ Export complete.', delay: 3400 },
+        ];
+        const termOut = document.getElementById('term-output');
+        termLines.forEach(line => {
+            setTimeout(() => {
+                const div = document.createElement('div');
+                div.style.cssText = 'color:#88aa88; font-size:11px; margin-bottom:2px;';
+                div.textContent = line.text;
+                termOut.appendChild(div);
+            }, line.delay);
+        });
+
+        // Boot sequence (Panel 03 replaced with status in summary panel)
     </script>
 </body>
-
 </html>

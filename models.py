@@ -5,7 +5,7 @@ SQLModel definitions for the application.
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from sqlmodel import Field, SQLModel
 
 
@@ -26,3 +26,12 @@ class Product(SQLModel, table=True):
     # Optional metadata
     category: Optional[str] = None
     rating: Optional[float] = None
+
+    def model_post_init(self, __context: Any) -> None:
+        # Strip and validate name
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("Product name must not be empty")
+        # Validate price
+        if self.price < 0:
+            raise ValueError("Price must be non-negative")

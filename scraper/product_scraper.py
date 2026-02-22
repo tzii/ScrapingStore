@@ -81,9 +81,6 @@ class StaticScraper(BaseScraper):
         products = []
 
         cards = soup.select("div.product-card")
-        # Fallback selector
-        if not cards:
-            cards = soup.find_all("div", class_=lambda x: x and "css-" in x)
 
         for card in cards:
             try:
@@ -92,27 +89,47 @@ class StaticScraper(BaseScraper):
                     continue
                 name = name_elem.get_text(strip=True)
 
-                # Simple text extraction for price/availability
-                text = card.get_text(separator="|", strip=True)
+                price = self._extract_price(card)
+                availability = self._extract_availability(card)
 
-                # Create partial product - Cleaning will happen in pipeline
-                p = Product(
-                    name=name,
-                    source_url=url,
-                    # Store raw strings temporarily; cleaner fixes them
-                    price=0.0,
-                    availability=text,
-                    image_url=None,
-                )
+                image_url = None
                 img_tag = card.find("img")
                 if isinstance(img_tag, Tag) and img_tag.has_attr("src"):
                     src = img_tag["src"]
                     if isinstance(src, str):
-                        p.image_url = src
+                        image_url = src
 
+                p = Product(
+                    name=name,
+                    source_url=url,
+                    price=price,
+                    availability=availability,
+                    image_url=image_url,
+                )
                 products.append(p)
             except Exception as e:
                 logger.warning(f"Failed to parse product on {url}: {e}")
                 continue
 
         return products
+
+    @staticmethod
+    def _extract_price(card: Tag) -> float:
+        """Extract price from a product card using regex."""
+        import re
+
+        text = card.get_text(separator=" ", strip=True)
+        match = re.search(r"(\d{1,3}(?:[.,]\d{2})?)\s*€", text)
+        if match:
+            return float(match.group(1).replace(",", "."))
+        return 0.0
+
+    @staticmethod
+    def _extract_availability(card: Tag) -> str:
+        """Extract availability status from a product card."""
+        text = card.get_text(separator=" ", strip=True).lower()
+        if "in stock" in text or "add to basket" in text:
+            return "In Stock"
+        if "out of stock" in text or "unavailable" in text:
+            return "Out of Stock"
+        return "Unknown"

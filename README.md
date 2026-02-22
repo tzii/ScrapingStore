@@ -7,7 +7,7 @@
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas)
-![Plotly](https://img.shields.io/badge/Plotly-Visualization-3F4F75?logo=plotly)
+![Chart.js](https://img.shields.io/badge/Chart.js-Visualization-FF6384?logo=chartdotjs)
 
 A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration.
 
@@ -26,9 +26,11 @@ A complete end-to-end data engineering portfolio project demonstrating web scrap
 | Category | Technologies & Techniques |
 |----------|---------------------------|
 | **Web Scraping** | Playwright (headless browser), BeautifulSoup, async/await, pagination handling |
-| **Data Cleaning** | Pandas, regex, currency parsing, duplicate removal, data validation |
-| **Visualization** | Plotly Express, interactive dashboards, responsive HTML exports |
+| **Data Cleaning** | Pandas, numpy, duplicate removal, data normalization |
+| **Visualization** | Chart.js, Grid.js, Alpine.js, Jinja2 HTML dashboards (modern + terminal) |
+| **Database** | SQLModel ORM, SQLite, upsert logic |
 | **Data Export** | Power BI-ready CSV (UTF-8 BOM), automated pipeline |
+| **DevOps** | Docker, GitHub Actions CI, pre-commit hooks, pytest |
 
 ---
 
@@ -38,8 +40,8 @@ A complete end-to-end data engineering portfolio project demonstrating web scrap
 graph TD
     User[User] --> CLI[CLI (main.py)]
     CLI --> Scraper[Scraper Module]
-    Scraper -->|Raw HTML| Cleaner[Cleaner Module]
-    Cleaner -->|Product Objects| DB[Database (SQLModel)]
+    Scraper -->|Structured Products| Cleaner[Cleaner Module]
+    Cleaner -->|Validated Products| DB[Database (SQLModel)]
     DB -->|Query| Dashboard[Dashboard Generator]
     DB -->|Export| CSV[CSV File]
     Dashboard -->|HTML| Browser[Browser View]
@@ -52,8 +54,8 @@ graph TD
 This project scrapes product data from the [Oxylabs Sandbox E-commerce](https://sandbox.oxylabs.io/products) website and processes it through a complete data pipeline:
 
 1. **Web Scraping** - Extract ~3000 products using Playwright browser automation
-2. **Data Cleaning** - Process and transform raw data with Pandas
-3. **Visualization** - Create interactive charts with Plotly Express
+2. **Data Cleaning** - Normalize and deduplicate data with Pandas
+3. **Visualization** - Interactive dashboards with Chart.js and Grid.js
 4. **Power BI Export** - Generate analysis-ready CSV files
 
 ---
@@ -64,29 +66,33 @@ This project scrapes product data from the [Oxylabs Sandbox E-commerce](https://
 ScrapingStore/
 ├── scraper/
 │   ├── __init__.py
-│   ├── base.py                     # Base scraper class
-│   ├── product_scraper.py          # BeautifulSoup scraper (static)
-│   └── product_scraper_browser.py  # Playwright scraper (dynamic JS)
+│   ├── base.py                     # Abstract base scraper class
+│   ├── product_scraper.py          # BeautifulSoup scraper (static HTML)
+│   └── product_scraper_browser.py  # Playwright scraper (JS-rendered pages)
 ├── cleaning/
 │   ├── __init__.py
 │   └── data_cleaner.py             # Pandas data cleaning pipeline
 ├── visualization/
 │   ├── __init__.py
-│   ├── charts.py                   # Plotly chart generators
-│   ├── dashboard_generator.py      # Modern dashboard template
-│   ├── terminal_dashboard_generator.py
+│   ├── dashboard_generator.py      # Modern dashboard (Tailwind/Chart.js)
+│   ├── terminal_dashboard_generator.py  # Retro terminal dashboard
 │   └── templates/                  # Jinja2 HTML templates
 ├── tests/                          # pytest test suite
+│   ├── conftest.py                 # Shared fixtures
 │   ├── test_scraper.py
-│   └── test_data_cleaner.py
+│   ├── test_cleaner.py
+│   ├── test_database.py
+│   ├── test_models.py
+│   └── test_cli.py
 ├── data/                           # Output directory (gitignored)
 ├── config.py                       # Centralized configuration
 ├── database.py                     # SQLModel database manager
-├── models.py                       # Pydantic/SQLModel data models
-├── logger.py                       # Logging configuration
-├── main.py                         # CLI pipeline orchestrator
+├── models.py                       # Pydantic/SQLModel data models with validation
+├── logger.py                       # Logging configuration (Rich)
+├── main.py                         # CLI pipeline orchestrator (Typer)
 ├── requirements.txt
-├── LICENSE
+├── Dockerfile
+├── docker-compose.yml
 └── README.md
 ```
 
@@ -121,22 +127,34 @@ playwright install chromium
 
 ```bash
 # Quick test: scrape 2 pages (~64 products)
-python main.py --pages 2
+python main.py scrape --pages 2
 
 # Default: scrape 10 pages (~320 products)
-python main.py
+python main.py scrape
 
 # Scrape all pages (~3000 products)
-python main.py --all
+python main.py scrape --all
 
 # Custom delay between requests (be respectful!)
-python main.py --pages 10 --delay 2.0
+python main.py scrape --pages 10 --delay 2.0
+
+# Use browser scraper for JS-rendered pages
+python main.py scrape --type browser --pages 5
 ```
 
+### Other Commands
+
+```bash
+# Export existing data to Power BI CSV
+python main.py export
+
+# Regenerate dashboards from existing data
+python main.py generate-report
+```
 
 ### Configuration
 
-You can configure the scraper using a `.env` file (copy from `.env.example` if available) or environment variables:
+You can configure the scraper using a `.env` file (copy from `.env.example`):
 
 ```bash
 BASE_URL="https://sandbox.oxylabs.io/products"
@@ -147,10 +165,11 @@ DB_NAME="products.db"
 
 ### Running Tests
 
-To ensure everything is working correctly:
-
 ```bash
 pytest
+
+# With coverage report
+pytest --cov=scraper --cov=cleaning --cov=visualization --cov-report=term-missing
 ```
 
 ---
@@ -159,12 +178,9 @@ pytest
 
 | File | Description |
 |------|-------------|
-| `products_raw.csv` | Raw scraped data |
-| `products_cleaned.csv` | Cleaned and transformed data |
 | `products_powerbi.csv` | Power BI-ready export (UTF-8 BOM) |
 | `dashboard.html` | Interactive modern dashboard |
 | `dashboard_terminal.html` | Terminal-style dashboard |
-| `charts/*.html` | Individual chart files |
 
 ---
 
@@ -172,27 +188,31 @@ pytest
 
 ### Web Scraper (`scraper/`)
 
-- **Playwright-based** headless browser for JavaScript-rendered content
-- Async/await for efficient concurrent scraping
-- Rate limiting to respect server resources
-- Automatic pagination handling
-- Robust error handling and retry logic
+- **Two scraper implementations**: Static (BeautifulSoup) and Browser (Playwright)
+- Structured data extraction (price, availability, images) at scrape time
+- Async/await with concurrency limiting (semaphore) for browser scraper
+- Rate limiting and configurable delay between requests
+- Automatic pagination with consecutive-empty-page detection
+- Retry logic with exponential backoff (static scraper)
 
 ### Data Cleaner (`cleaning/data_cleaner.py`)
 
-- European price format parsing (`88,99 €` → `88.99`)
-- Availability status standardization
-- Missing value handling with configurable strategies
-- Duplicate detection and removal
-- Automatic price categorization (Budget/Mid-Range/Premium/Luxury)
+- Availability status normalization (`In Stock` / `Out of Stock` / `Unknown`)
+- Duplicate detection and removal by product name
+- Name whitespace trimming
+- Vectorized operations via Pandas + NumPy for performance
 
-### Visualization (`visualization/charts.py`)
+### Visualization (`visualization/`)
 
-- Price distribution histogram with statistics
-- Price by availability box plots
-- Price category bar charts
-- Availability pie/donut charts
-- Combined interactive dashboard
+- **Modern Dashboard**: Tailwind CSS, Chart.js (price distribution, segment doughnut), Grid.js (searchable/sortable product table), Alpine.js (dark mode toggle)
+- **Terminal Dashboard**: Retro CRT-style with ASCII bar charts, auto-calculated KPIs
+- Auto-detected franchise/keyword analysis (no hardcoded keywords)
+
+### Data Models (`models.py`)
+
+- SQLModel/Pydantic hybrid with field validators
+- Price must be non-negative; name must not be empty
+- Automatic UTC timestamps on creation
 
 #### Terminal Dashboard Mode
 The project also includes a retro-style terminal dashboard for CLI enthusiasts:
@@ -212,15 +232,27 @@ The `products_powerbi.csv` file is formatted for seamless Power BI import:
 
 ---
 
+## ⚠️ Known Limitations
+
+- **Static scraper vs. JS-rendered sites**: The `static` scraper uses `requests` + BeautifulSoup, which cannot execute JavaScript. The target sandbox site is JS-rendered, so **use `--type browser`** for actual scraping. The static scraper is included to demonstrate the pattern and works with server-rendered HTML.
+- **Upsert by name**: Products are matched by `name` during upsert. If two genuinely different products share the same name, only the latest will be kept.
+- **Sandbox-specific**: The CSS selectors (`div.product-card`, `h4`) are tailored to the Oxylabs sandbox. Adapting to a different site would require updating the selectors.
+
+---
+
 ## 🛠️ Technologies
 
 - **Python 3.9+**
 - **Playwright** - Browser automation for JS-rendered sites
 - **BeautifulSoup4** - HTML parsing
 - **Requests** - HTTP client
-- **Pandas** - Data manipulation
-- **Plotly Express** - Interactive visualizations
+- **Pandas / NumPy** - Data manipulation
+- **SQLModel / Pydantic** - ORM and data validation
+- **Typer / Rich** - CLI interface
+- **Chart.js / Grid.js / Alpine.js** - Frontend visualization
 - **Jinja2** - HTML templating
+- **Docker** - Containerization
+- **GitHub Actions** - CI/CD
 
 ---
 

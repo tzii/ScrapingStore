@@ -5,6 +5,7 @@ Uses Playwright for dynamic scraping with true concurrency.
 """
 
 import asyncio
+import re
 from typing import List, Optional
 from playwright.async_api import async_playwright, Page, BrowserContext
 
@@ -21,7 +22,37 @@ class BrowserScraper(BaseScraper):
         """
         Entry point that runs the async event loop.
         """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(
+                    asyncio.run, self._scrape_async(max_pages)
+                ).result()
         return asyncio.run(self._scrape_async(max_pages))
+
+    @staticmethod
+    def _extract_price(text: str) -> float:
+        """Extract price from card text using regex."""
+        match = re.search(r"(\d{1,3}(?:[.,]\d{2})?)\s*€", text)
+        if match:
+            return float(match.group(1).replace(",", "."))
+        return 0.0
+
+    @staticmethod
+    def _extract_availability(text: str) -> str:
+        """Extract availability status from card text."""
+        lower = text.lower()
+        if "in stock" in lower or "add to basket" in lower:
+            return "In Stock"
+        if "out of stock" in lower or "unavailable" in lower:
+            return "Out of Stock"
+        return "Unknown"
 
     async def _scrape_async(self, max_pages: Optional[int]) -> List[Product]:
         logger.info(f"Starting browser scrape of {self.base_url}")
@@ -138,11 +169,11 @@ class BrowserScraper(BaseScraper):
                             continue
 
                         name = await name_el.inner_text()
-
-                        # Get raw text for cleaning later
                         text = await card.inner_text()
 
-                        # Image
+                        price = self._extract_price(text)
+                        availability = self._extract_availability(text)
+
                         img_el = card.locator("img")
                         img_src = (
                             await img_el.get_attribute("src")
@@ -154,8 +185,8 @@ class BrowserScraper(BaseScraper):
                             Product(
                                 name=name,
                                 source_url=url,
-                                price=0.0,  # Placeholder
-                                availability=text,  # Placeholder containing raw text
+                                price=price,
+                                availability=availability,
                                 image_url=img_src,
                             )
                         )

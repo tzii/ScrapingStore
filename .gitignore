@@ -52,6 +52,10 @@ manual_log.txt
 scrape_error.log
 repomix-output.xml
 
+# Coverage
+.coverage
+htmlcov/
+
 # OS files
 .DS_Store
 Thumbs.db

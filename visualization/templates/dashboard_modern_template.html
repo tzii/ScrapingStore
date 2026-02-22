@@ -5,358 +5,303 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ScrapingStore Analytics</title>
-
-    <!-- OpenGraph Meta Tags -->
     <meta property="og:title" content="ScrapingStore Analytics" />
     <meta property="og:description" content="Live product data dashboard from Scrape Portfolio Project." />
     <meta property="og:image" content="https://tzii.github.io/ScrapingStore/assets/dashboard_modern.png" />
     <meta property="og:url" content="https://tzii.github.io/ScrapingStore/" />
     <meta name="twitter:card" content="summary_large_image" />
 
-
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        // Theme initialization
         const getTheme = () => {
-            if (localStorage.getItem('theme')) {
-                return localStorage.getItem('theme') === 'dark';
-            }
-            return window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (localStorage.getItem('theme')) return localStorage.getItem('theme') === 'dark';
+            return true;
         };
-
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        dark: {
-                            900: '#080808',
-                            800: '#121212',
-                            700: '#18181b',
-                        },
-                        primary: '#5e6ad2',
-                        success: '#27cbc0',
-                        danger: '#f43f5e',
+                        surface: { DEFAULT: '#131316', raised: '#1a1a1f', border: '#222228' },
+                        accent: { DEFAULT: '#d4a843', muted: 'rgba(212,168,67,0.12)' },
+                        txt: { primary: '#ececf0', secondary: '#6e6e7a' },
                     },
                     fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
+                        display: ['Satoshi', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
                     }
                 }
             }
         }
     </script>
-
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- Alpine.js -->
+    <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-    <!-- Grid.js -->
-    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
-    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <link href="https://unpkg.com/gridjs@6.2.0/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <script src="https://unpkg.com/gridjs@6.2.0/dist/gridjs.umd.js"></script>
 
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: 'Satoshi', sans-serif; }
+
+        /* Grain texture overlay */
+        .grain::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            pointer-events: none;
+            opacity: 0.035;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
         }
 
-        /* Dynamic Theme Variables for Grid.js */
+        /* Light mode */
         :root {
-            --grid-text: #374151;
-            --grid-bg: #ffffff;
-            --grid-border: #e5e7eb;
-            --grid-head-bg: #f9fafb;
-            --grid-hover: #f3f4f6;
-            --grid-input-bg: #ffffff;
-            --grid-input-border: #d1d5db;
+            --bg: #faf8f5; --surface: #ffffff; --surface-raised: #f5f3ef;
+            --border: #e8e4de; --text-primary: #1a1a1a; --text-secondary: #8a8580;
+            --grid-text: #1a1a1a; --grid-bg: #ffffff; --grid-border: #e8e4de;
+            --grid-head-bg: #f5f3ef; --grid-hover: #faf8f5;
+            --grid-input-bg: #fff; --grid-input-border: #e8e4de;
         }
-
         .dark {
-            --grid-text: #e5e7eb;
-            --grid-bg: #121212;
-            --grid-border: #27272a;
-            --grid-head-bg: #18181b;
-            --grid-hover: #18181b;
-            --grid-input-bg: #18181b;
-            --grid-input-border: #27272a;
+            --bg: #09090b; --surface: #131316; --surface-raised: #1a1a1f;
+            --border: #222228; --text-primary: #ececf0; --text-secondary: #6e6e7a;
+            --grid-text: #ececf0; --grid-bg: #131316; --grid-border: #222228;
+            --grid-head-bg: #1a1a1f; --grid-hover: #1a1a1f;
+            --grid-input-bg: #1a1a1f; --grid-input-border: #222228;
         }
 
-        /* Grid.js Theme Overrides */
-        .gridjs-container {
-            color: var(--grid-text) !important;
-            background: transparent !important;
-            border: none !important;
+        /* Animations */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes countIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+        @keyframes barGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+        @keyframes pulse-gold { 0%, 100% { box-shadow: 0 0 0 0 rgba(212,168,67,0.3); } 50% { box-shadow: 0 0 12px 4px rgba(212,168,67,0.15); } }
+
+        .anim-in { opacity: 0; animation: fadeInUp 0.6s ease-out forwards; }
+        .anim-d1 { animation-delay: 0.1s; } .anim-d2 { animation-delay: 0.2s; }
+        .anim-d3 { animation-delay: 0.3s; } .anim-d4 { animation-delay: 0.4s; }
+        .anim-d5 { animation-delay: 0.5s; } .anim-d6 { animation-delay: 0.6s; }
+        .anim-d7 { animation-delay: 0.7s; } .anim-d8 { animation-delay: 0.8s; }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+        }
+        .kpi-card:hover { transform: translateY(-2px); border-color: #d4a843; }
+
+        .kpi-card.gold::before { background: #d4a843; }
+        .kpi-card.emerald::before { background: #34d399; }
+        .kpi-card.rose::before { background: #fb7185; }
+        .kpi-card.slate::before { background: #64748b; }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
         }
 
-        .gridjs-wrapper {
-            border-radius: 0.5rem;
-            border: 1px solid var(--grid-border) !important;
-            box-shadow: none !important;
-        }
+        /* Franchise bar animation */
+        .fran-bar { transform-origin: left; animation: barGrow 0.8s ease-out forwards; }
 
-        .gridjs-head {
-            background-color: transparent !important;
-        }
-
-        th.gridjs-th {
-            background-color: var(--grid-head-bg) !important;
-            color: var(--grid-text) !important;
-            border-bottom: 1px solid var(--grid-border) !important;
-            border-top: none !important;
-        }
-
-        td.gridjs-td {
-            background-color: var(--grid-bg) !important;
-            color: var(--grid-text) !important;
-            border-bottom: 1px solid var(--grid-border) !important;
-        }
-
-        .gridjs-tr:hover td.gridjs-td {
-            background-color: var(--grid-hover) !important;
-        }
-
-        .gridjs-footer {
-            background-color: var(--grid-bg) !important;
-            border-top: 1px solid var(--grid-border) !important;
-        }
-
-        .gridjs-pagination .gridjs-pages button {
-            background-color: var(--grid-head-bg) !important;
-            color: var(--grid-text) !important;
-            border: 1px solid var(--grid-border) !important;
-        }
-
-        .gridjs-pagination .gridjs-pages button:hover {
-            background-color: var(--grid-hover) !important;
-        }
-
-        .gridjs-pagination .gridjs-pages button.gridjs-currentPage {
-            background-color: #5e6ad2 !important;
-            border-color: #5e6ad2 !important;
-            color: white !important;
-        }
-
-        /* Fix Search Input */
-        input.gridjs-input {
-            background-color: var(--grid-input-bg);
-            border: 1px solid var(--grid-input-border);
-            color: var(--grid-text);
-        }
+        /* Grid.js overrides */
+        .gridjs-container { color: var(--grid-text) !important; background: transparent !important; border: none !important; }
+        .gridjs-wrapper { border-radius: 8px; border: 1px solid var(--grid-border) !important; box-shadow: none !important; }
+        .gridjs-head { background-color: transparent !important; }
+        th.gridjs-th { background-color: var(--grid-head-bg) !important; color: var(--grid-text) !important; border-bottom: 1px solid var(--grid-border) !important; border-top: none !important; font-family: 'Satoshi', sans-serif; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+        td.gridjs-td { background-color: var(--grid-bg) !important; color: var(--grid-text) !important; border-bottom: 1px solid var(--grid-border) !important; font-family: 'Satoshi', sans-serif; font-size: 13px; }
+        .gridjs-tr:hover td.gridjs-td { background-color: var(--grid-hover) !important; }
+        .gridjs-footer { background-color: var(--grid-bg) !important; border-top: 1px solid var(--grid-border) !important; }
+        .gridjs-pagination .gridjs-pages button { background-color: var(--grid-head-bg) !important; color: var(--grid-text) !important; border: 1px solid var(--grid-border) !important; font-family: 'Satoshi', sans-serif; }
+        .gridjs-pagination .gridjs-pages button:hover { background-color: var(--grid-hover) !important; }
+        .gridjs-pagination .gridjs-pages button.gridjs-currentPage { background-color: #d4a843 !important; border-color: #d4a843 !important; color: #09090b !important; }
+        input.gridjs-input { background-color: var(--grid-input-bg); border: 1px solid var(--grid-input-border); color: var(--grid-text); border-radius: 8px; font-family: 'Satoshi', sans-serif; }
+        .gridjs-summary { color: var(--text-secondary) !important; }
     </style>
 </head>
 
-<body
-    class="bg-gray-50 dark:bg-dark-900 text-gray-900 dark:text-gray-100 min-h-screen flex flex-col p-4 md:p-8 transition-colors duration-200"
-    x-data="dashboard()">
+<body class="grain min-h-screen flex flex-col transition-colors duration-200" style="background:var(--bg); color:var(--text-primary);" x-data="dashboard()">
 
-    <!-- Splash Screen -->
-    <div x-show="showSplash" x-transition:leave="transition ease-in duration-500" x-transition:leave-start="opacity-100"
-        x-transition:leave-end="opacity-0"
-        class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-50 dark:bg-dark-900 text-gray-900 dark:text-gray-100">
-        <div
-            class="w-20 h-20 bg-gradient-to-tr from-indigo-500 to-primary rounded-2xl flex items-center justify-center shadow-2xl shadow-indigo-500/30 mb-6 animate-bounce">
-            <span class="text-4xl font-bold text-white">S</span>
-        </div>
-        <h1 class="text-2xl font-bold tracking-tight mb-2">ScrapingStore Analytics</h1>
-        <div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-            <span class="w-2 h-2 bg-success rounded-full animate-pulse"></span>
-            Loading Real-time Data...
-        </div>
+    <!-- Splash -->
+    <div x-show="showSplash" x-transition:leave="transition ease-in duration-500" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+        class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5" style="background:var(--bg);">
+        <div class="w-3 h-3 rounded-full bg-accent" style="animation: pulse-gold 1.5s ease-in-out infinite;"></div>
+        <p class="font-mono text-xs tracking-[0.2em] uppercase" style="color:var(--text-secondary);">Initializing data stream...</p>
     </div>
 
     <!-- Header -->
-    <header
-        class="max-w-7xl mx-auto w-full flex justify-between items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-800">
+    <header class="max-w-[1400px] mx-auto w-full px-6 pt-8 pb-6 flex justify-between items-center anim-in">
         <div class="flex items-center gap-4">
-            <div
-                class="w-10 h-10 bg-gradient-to-tr from-indigo-500 to-primary rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <span class="text-xl font-bold">S</span>
+            <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
+                <span class="text-sm font-bold text-[#09090b]">S</span>
             </div>
             <div>
-                <h1 class="text-xl font-semibold tracking-tight">Analytics Dashboard</h1>
-                <p class="text-xs text-gray-500">Real-time Data Pipeline</p>
+                <h1 class="text-lg font-bold tracking-tight" style="color:var(--text-primary);">ScrapingStore</h1>
+                <p class="text-[11px] font-mono tracking-wide uppercase" style="color:var(--text-secondary);">Analytics Dashboard</p>
             </div>
         </div>
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
             <a href="dashboard_terminal.html"
-                class="hidden md:flex items-center gap-2 text-xs font-mono text-gray-500 hover:text-primary transition-colors border border-gray-200 dark:border-gray-800 rounded px-2 py-1">
-                <span>$_TERMINAL</span>
+                class="hidden md:flex items-center gap-2 text-[11px] font-mono tracking-wider uppercase px-3 py-1.5 rounded-md border transition-colors hover:text-accent hover:border-accent"
+                style="color:var(--text-secondary); border-color:var(--border);">
+                ▸ Terminal
             </a>
             <button @click="$store.theme.toggle()"
-                class="p-2 rounded-lg bg-gray-200 dark:bg-dark-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                <!-- Sun Icon -->
-                <svg x-show="!$store.theme.isDark" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                    viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                class="w-8 h-8 rounded-lg flex items-center justify-center border transition-colors hover:border-accent"
+                style="border-color:var(--border); color:var(--text-secondary);">
+                <svg x-show="$store.theme.isDark" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
-                <!-- Moon Icon -->
-                <svg x-show="$store.theme.isDark" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                    viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                <svg x-show="!$store.theme.isDark" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                 </svg>
             </button>
-            <div
-                class="flex items-center gap-3 bg-success/10 border border-success/20 px-3 py-1 rounded-full text-success text-xs font-medium">
-                <span class="w-2 h-2 bg-success rounded-full animate-pulse"></span>
-                Live Data
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-mono font-medium tracking-wide" style="background:rgba(52,211,153,0.08); color:#34d399; border:1px solid rgba(52,211,153,0.15);">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                LIVE
             </div>
         </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto w-full grid grid-cols-12 gap-6 mb-8">
-
-        <!-- KPI Cards -->
-        <div
-            class="col-span-12 md:col-span-4 lg:col-span-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col justify-between h-36 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-sm dark:shadow-none">
-            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm font-medium">
-                <span>📦</span> Total Products
+    <main class="max-w-[1400px] mx-auto w-full px-6 pb-8 flex-1">
+        <!-- KPI Row -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="kpi-card gold anim-in anim-d1">
+                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Total Products</p>
+                <p class="text-4xl lg:text-5xl font-bold tracking-tight font-display" style="color:var(--text-primary);" id="kpi-total">0</p>
+                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">Scraped successfully</p>
             </div>
-            <div class="text-4xl font-bold tracking-tight" x-text="kpi.total">0</div>
-            <div class="text-xs text-gray-500">100% Success Rate</div>
-        </div>
-
-        <div
-            class="col-span-12 md:col-span-4 lg:col-span-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col justify-between h-36 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-sm dark:shadow-none">
-            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm font-medium">
-                <span>💰</span> Avg Price
+            <div class="kpi-card emerald anim-in anim-d2">
+                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Avg Price</p>
+                <p class="text-4xl lg:text-5xl font-bold tracking-tight font-display" style="color:var(--text-primary);"><span class="text-2xl" style="color:var(--text-secondary);">€</span><span id="kpi-avg">0</span></p>
+                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">Market average</p>
             </div>
-            <div class="text-4xl font-bold tracking-tight" x-text="'€' + kpi.avg">€0.00</div>
-            <div class="text-xs text-gray-500">Market Average</div>
-        </div>
-
-        <div
-            class="col-span-12 md:col-span-4 lg:col-span-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col justify-between h-36 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-sm dark:shadow-none">
-            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm font-medium">
-                <span>💎</span> Premium Items
+            <div class="kpi-card rose anim-in anim-d3">
+                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Premium Items</p>
+                <p class="text-4xl lg:text-5xl font-bold tracking-tight font-display" style="color:var(--text-primary);" id="kpi-premium">0</p>
+                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">Products &gt; €85</p>
             </div>
-            <div class="text-4xl font-bold tracking-tight" x-text="kpi.premium">0</div>
-            <div class="text-xs text-gray-500">Products > €85.00</div>
-        </div>
-
-        <div
-            class="col-span-12 md:col-span-12 lg:col-span-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col justify-between h-36 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-sm dark:shadow-none">
-            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm font-medium">
-                <span>⚡</span> Availability
-            </div>
-            <div class="text-4xl font-bold tracking-tight text-success" x-text="kpi.avail_pct">0%</div>
-            <div class="text-xs text-gray-500" x-text="kpi.avail_label">Unknown</div>
-        </div>
-
-        <!-- Charts -->
-        <div
-            class="col-span-12 lg:col-span-8 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 h-96 shadow-sm dark:shadow-none">
-            <h3 class="text-lg font-medium mb-4">Price Distribution</h3>
-            <div class="h-72 w-full">
-                <canvas id="priceChart"></canvas>
+            <div class="kpi-card slate anim-in anim-d4">
+                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Availability</p>
+                <p class="text-4xl lg:text-5xl font-bold tracking-tight font-display" style="color:#34d399;" id="kpi-avail">0%</p>
+                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);" x-text="kpi.avail_label">—</p>
             </div>
         </div>
 
-        <div
-            class="col-span-12 lg:col-span-4 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 h-96 shadow-sm dark:shadow-none">
-            <h3 class="text-lg font-medium mb-4">Price Segments</h3>
-            <div class="h-72 w-full flex items-center justify-center">
-                <canvas id="segmentChart"></canvas>
+        <!-- Charts Row -->
+        <div class="grid grid-cols-12 gap-4 mb-6">
+            <div class="col-span-12 lg:col-span-8 panel anim-in anim-d5" style="min-height:380px;">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-sm font-semibold tracking-tight" style="color:var(--text-primary);">Price Distribution</h3>
+                    <span class="text-[10px] font-mono uppercase tracking-wider" style="color:var(--text-secondary);">Histogram</span>
+                </div>
+                <div style="height:290px;"><canvas id="priceChart"></canvas></div>
+            </div>
+            <div class="col-span-12 lg:col-span-4 panel anim-in anim-d6" style="min-height:380px;">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-sm font-semibold tracking-tight" style="color:var(--text-primary);">Segments</h3>
+                    <span class="text-[10px] font-mono uppercase tracking-wider" style="color:var(--text-secondary);">Breakdown</span>
+                </div>
+                <div style="height:290px;" class="flex items-center justify-center"><canvas id="segmentChart"></canvas></div>
             </div>
         </div>
 
-        <!-- Data Table (Grid.js) -->
-        <div
-            class="col-span-12 lg:col-span-8 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 min-h-[500px] shadow-sm dark:shadow-none">
-            <h3 class="text-lg font-medium mb-4">Product Catalog</h3>
-            <div id="grid-table"></div>
-        </div>
-
-        <!-- Franchise List -->
-        <div
-            class="col-span-12 lg:col-span-4 bg-white dark:bg-dark-800 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 min-h-[500px] shadow-sm dark:shadow-none">
-            <h3 class="text-lg font-medium mb-4">Top Franchises</h3>
-            <div class="space-y-4">
-                <template x-for="f in franchises" :key="f.name">
-                    <div class="flex items-center group">
-                        <div class="flex-1 text-sm text-gray-600 dark:text-gray-300 group-hover:text-black dark:group-hover:text-white transition-colors"
-                            x-text="f.name"></div>
-                        <div class="flex-1 mx-4 h-1.5 bg-gray-200 dark:bg-dark-700 rounded-full overflow-hidden">
-                            <div class="h-full bg-primary rounded-full"
-                                :style="`width: ${(f.count / maxFranchise) * 100}%`"></div>
+        <!-- Table + Franchise Row -->
+        <div class="grid grid-cols-12 gap-4">
+            <div class="col-span-12 lg:col-span-8 panel anim-in anim-d7" style="min-height:480px;">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-sm font-semibold tracking-tight" style="color:var(--text-primary);">Product Catalog</h3>
+                    <span class="text-[10px] font-mono uppercase tracking-wider" style="color:var(--text-secondary);" x-text="kpi.total + ' items'">0 items</span>
+                </div>
+                <div id="grid-table"></div>
+            </div>
+            <div class="col-span-12 lg:col-span-4 panel anim-in anim-d8" style="min-height:480px;">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-sm font-semibold tracking-tight" style="color:var(--text-primary);">Top Keywords</h3>
+                    <span class="text-[10px] font-mono uppercase tracking-wider" style="color:var(--text-secondary);">Auto-detected</span>
+                </div>
+                <div class="space-y-3">
+                    <template x-for="(f, idx) in franchises" :key="f.name">
+                        <div class="group">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-xs font-medium" style="color:var(--text-primary);" x-text="f.name"></span>
+                                <span class="text-[11px] font-mono" style="color:var(--text-secondary);" x-text="f.count"></span>
+                            </div>
+                            <div class="h-1.5 rounded-full overflow-hidden" style="background:var(--border);">
+                                <div class="h-full rounded-full fran-bar" style="background:#d4a843;"
+                                    :style="`width:${(f.count / maxFranchise) * 100}%; animation-delay:${0.8 + idx * 0.1}s;`"></div>
+                            </div>
                         </div>
-                        <div class="w-8 text-right text-xs font-mono text-gray-500" x-text="f.count"></div>
-                    </div>
-                </template>
+                    </template>
+                </div>
             </div>
         </div>
-
     </main>
 
-    <footer
-        class="max-w-7xl mx-auto w-full text-center text-gray-600 text-sm py-8 border-t border-gray-200 dark:border-gray-800 mt-auto">
-        Generated on {{ timestamp }} • ScrapingStore Analytics
+    <footer class="max-w-[1400px] mx-auto w-full px-6 py-8 text-center border-t" style="border-color:var(--border);">
+        <p class="text-[11px] font-mono tracking-wide" style="color:var(--text-secondary);">Generated on {{ timestamp }}  ·  ScrapingStore Analytics  ·  Made by Simone</p>
     </footer>
 
-    <script>
-        // --- Data Injection ---
-    </script>
-    <!-- Safe Data Injection -->
+    <!-- Data Injection -->
     <script id="products-data" type="application/json">{{ products_json | safe }}</script>
     <script id="franchise-data" type="application/json">{{ franchise_json | safe }}</script>
-    <script id="kpi-data" type="application/json">
-    {
-        "total": {{ kpi_total }},
-        "avg": "{{ kpi_avg }}",
-        "premium": {{ kpi_premium }},
-        "avail_pct": "{{ kpi_availability_pct }}",
-        "avail_label": "{{ kpi_availability_label }}"
-    }
-    </script>
+    <script id="kpi-data" type="application/json">{"total":{{ kpi_total }},"avg":"{{ kpi_avg }}","premium":{{ kpi_premium }},"avail_pct":"{{ kpi_availability_pct }}","avail_label":"{{ kpi_availability_label }}"}</script>
     <script id="chart-data" type="application/json">{{ chart_data_json | safe }}</script>
 
     <script>
-        // --- Data Injection ---
-        // Data is now loaded from script tags below to prevent XSS
-        /*
-        const productsData = {{ products_json | safe }};
-        const franchiseData = {{ franchise_json | safe }};
-        const kpiData = {
-            total: {{ kpi_total }},
-            avg: "{{ kpi_avg }}",
-            premium: {{ kpi_premium }}
-        };
-        */
-
-        // --- Alpine Component ---
+        // Alpine theme store
         document.addEventListener('alpine:init', () => {
             Alpine.store('theme', {
                 isDark: getTheme(),
                 toggle() {
                     this.isDark = !this.isDark;
                     localStorage.setItem('theme', this.isDark ? 'dark' : 'light');
-                    // Dispatch event for components to react
                     window.dispatchEvent(new CustomEvent('theme-changed', { detail: { isDark: this.isDark } }));
                 }
             });
         });
 
-        // Parse Safe JSON
         const productsData = JSON.parse(document.getElementById('products-data').textContent);
         const franchiseData = JSON.parse(document.getElementById('franchise-data').textContent);
         const rawKpi = JSON.parse(document.getElementById('kpi-data').textContent);
         const chartData = JSON.parse(document.getElementById('chart-data').textContent);
+        const kpiData = { total: rawKpi.total, avg: rawKpi.avg, premium: rawKpi.premium, avail_pct: rawKpi.avail_pct, avail_label: rawKpi.avail_label };
 
-        // Map KPI to expected format if needed
-        const kpiData = {
-            total: rawKpi.total,
-            avg: rawKpi.avg,
-            premium: rawKpi.premium,
-            avail_pct: rawKpi.avail_pct,
-            avail_label: rawKpi.avail_label
-        };
+        // Animated counter
+        function animateCount(el, target, prefix, suffix, duration) {
+            prefix = prefix || ''; suffix = suffix || '';
+            const isFloat = String(target).includes('.');
+            const numTarget = parseFloat(target);
+            if (isNaN(numTarget)) { el.textContent = prefix + target + suffix; return; }
+            let start = 0;
+            const startTime = performance.now();
+            function tick(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+                const current = start + (numTarget - start) * eased;
+                el.textContent = prefix + (isFloat ? current.toFixed(2) : Math.round(current)) + suffix;
+                if (progress < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
 
         function dashboard() {
             return {
@@ -364,141 +309,106 @@
                 kpi: kpiData,
                 franchises: franchiseData,
                 maxFranchise: Math.max(...franchiseData.map(d => d.count)) || 1,
+                charts: {},
                 init() {
-                    // Splash Screen Timer
                     setTimeout(() => {
                         this.showSplash = false;
-                    }, 2000);
-
+                        // Animate KPIs after splash
+                        setTimeout(() => {
+                            animateCount(document.getElementById('kpi-total'), kpiData.total, '', '', 1200);
+                            animateCount(document.getElementById('kpi-avg'), kpiData.avg, '', '', 1200);
+                            animateCount(document.getElementById('kpi-premium'), kpiData.premium, '', '', 1200);
+                            animateCount(document.getElementById('kpi-avail'), parseInt(kpiData.avail_pct) || 0, '', '%', 1200);
+                        }, 200);
+                    }, 1500);
                     this.initCharts();
                     this.initGrid();
                 },
-                charts: {},
                 updateCharts(e) {
                     const isDark = e.detail.isDark;
-                    const gridColor = isDark ? '#27272a' : '#e5e7eb';
-                    const textColor = isDark ? '#9ca3af' : '#4b5563';
-                    const theadColor = isDark ? '#18181b' : '#f9fafb';
-
-                    // Update Chart.js instances
+                    const gridColor = isDark ? '#222228' : '#e8e4de';
+                    const textColor = isDark ? '#6e6e7a' : '#8a8580';
                     Object.values(this.charts).forEach(chart => {
-                        if (chart.options.scales.x) { // If it has axes
+                        if (chart.options.scales && chart.options.scales.x) {
                             chart.options.scales.x.ticks.color = textColor;
                             chart.options.scales.y.ticks.color = textColor;
                             chart.options.scales.y.grid.color = gridColor;
                         }
-                        if (chart.options.plugins.legend) {
+                        if (chart.options.plugins.legend && chart.options.plugins.legend.labels) {
                             chart.options.plugins.legend.labels.color = textColor;
                         }
                         chart.update();
                     });
-
-                    // Force Grid.js re-render if needed via key hack or just accept CSS handling it (CSS vars handle most)
-                    // CSS vars --grid-text etc. are already bound to .dark class, so Grid.js updates automatically except for some specific elements
                 },
                 initCharts() {
-                    // Listen for theme changes
                     window.addEventListener('theme-changed', (e) => this.updateCharts(e));
-
                     const isDark = Alpine.store('theme').isDark;
-                    const gridColor = isDark ? '#27272a' : '#e5e7eb';
-                    const textColor = isDark ? '#9ca3af' : '#4b5563';
+                    const gridColor = isDark ? '#222228' : '#e8e4de';
+                    const textColor = isDark ? '#6e6e7a' : '#8a8580';
 
-                    // Price Chart Logic
-                    const priceCtx = document.getElementById('priceChart').getContext('2d');
-
-                    this.charts.price = new Chart(priceCtx, {
+                    this.charts.price = new Chart(document.getElementById('priceChart').getContext('2d'), {
                         type: 'bar',
                         data: {
                             labels: chartData.labels,
                             datasets: [{
-                                label: 'Product Count',
+                                label: 'Count',
                                 data: chartData.counts,
-                                backgroundColor: '#5e6ad2',
-                                borderRadius: 4,
-                                hoverBackgroundColor: '#747fdb'
+                                backgroundColor: '#d4a843',
+                                hoverBackgroundColor: '#e0bc6a',
+                                borderRadius: 6,
+                                borderSkipped: false,
                             }]
                         },
                         options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
+                            responsive: true, maintainAspectRatio: false,
+                            animation: { delay: (ctx) => ctx.dataIndex * 80 + 800 },
+                            plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1a1a1f', titleColor: '#ececf0', bodyColor: '#ececf0', borderColor: '#222228', borderWidth: 1, cornerRadius: 8, padding: 12, bodyFont: { family: 'Satoshi' }, titleFont: { family: 'Satoshi', weight: '600' } } },
                             scales: {
-                                y: {
-                                    grid: { color: gridColor },
-                                    ticks: { color: textColor }
-                                },
-                                x: {
-                                    grid: { display: false },
-                                    ticks: { color: textColor }
-                                }
+                                y: { grid: { color: gridColor, drawBorder: false }, ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 10 } }, border: { display: false } },
+                                x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 10 } }, border: { display: false } }
                             }
                         }
                     });
 
-                    // Segment Chart
-                    const segmentCtx = document.getElementById('segmentChart').getContext('2d');
                     let budget = 0, mid = 0, premium = 0, luxury = 0;
-                    productsData.forEach(p => {
-                        if (p.price < 70) budget++;
-                        else if (p.price < 80) mid++;
-                        else if (p.price < 90) premium++;
-                        else luxury++;
-                    });
+                    productsData.forEach(p => { if (p.price < 70) budget++; else if (p.price < 80) mid++; else if (p.price < 90) premium++; else luxury++; });
 
-                    this.charts.segment = new Chart(segmentCtx, {
+                    this.charts.segment = new Chart(document.getElementById('segmentChart').getContext('2d'), {
                         type: 'doughnut',
                         data: {
-                            labels: ['Budget', 'Mid', 'Premium', 'Luxury'],
+                            labels: ['Budget', 'Mid-Range', 'Premium', 'Luxury'],
                             datasets: [{
                                 data: [budget, mid, premium, luxury],
-                                backgroundColor: ['#27cbc0', '#f59e0b', '#5e6ad2', '#f43f5e'],
-                                borderWidth: 0
+                                backgroundColor: ['#64748b', '#d4a843', '#34d399', '#fb7185'],
+                                borderWidth: 0, hoverOffset: 6
                             }]
                         },
                         options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            cutout: '70%',
-                            plugins: {
-                                legend: { position: 'right', labels: { color: textColor, usePointStyle: true } }
-                            }
+                            responsive: true, maintainAspectRatio: false, cutout: '72%',
+                            animation: { animateRotate: true, duration: 1200, delay: 1000 },
+                            plugins: { legend: { position: 'bottom', labels: { color: textColor, usePointStyle: true, pointStyle: 'circle', padding: 16, font: { family: 'Satoshi', size: 11 } } } }
                         }
                     });
                 },
                 initGrid() {
                     const isDark = Alpine.store('theme').isDark;
-
                     new gridjs.Grid({
                         columns: [
-                            { name: 'Product Name', width: '50%' },
-                            {
-                                name: 'Price',
-                                width: '20%',
-                                formatter: (cell) => gridjs.html(`<span class="px-2 py-1 rounded ${isDark ? 'bg-white/5' : 'bg-gray-100'} font-mono text-xs">€${parseFloat(cell || 0).toFixed(2)}</span>`)
-                            },
-                            {
-                                name: 'Status',
-                                width: '30%',
-                                formatter: (cell) => gridjs.html(`<span class="text-success text-xs">● ${cell}</span>`)
-                            }
+                            { name: 'Product', width: '50%' },
+                            { name: 'Price', width: '20%', formatter: (cell) => gridjs.html(`<span style="font-family:'JetBrains Mono',monospace;font-size:12px;">€${parseFloat(cell||0).toFixed(2)}</span>`) },
+                            { name: 'Status', width: '30%', formatter: (cell) => {
+                                const color = (cell||'').includes('In Stock') ? '#34d399' : (cell||'').includes('Out') ? '#fb7185' : '#64748b';
+                                return gridjs.html(`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;"><span style="width:6px;height:6px;border-radius:50%;background:${color};display:inline-block;"></span>${cell}</span>`);
+                            }}
                         ],
-                        data: productsData.map(p => [p.name, p.price, p.availability]),
-                        search: true,
-                        sort: true,
-                        pagination: { limit: 10 },
-                        className: {
-                            table: 'w-full text-sm text-left',
-                            thead: `text-xs uppercase ${isDark ? 'text-gray-400 bg-dark-700' : 'text-gray-500 bg-gray-50'}`,
-                            tbody: isDark ? 'bg-dark-800' : 'bg-white'
-                        }
-                    }).render(document.getElementById("grid-table"));
+                        data: productsData.map(p => [p.name || '', p.price || 0, p.availability || 'Unknown']),
+                        search: true, sort: true,
+                        pagination: { limit: 12 },
+                        language: { search: { placeholder: 'Search products...' } },
+                    }).render(document.getElementById('grid-table'));
                 }
             }
         }
     </script>
-
-
 </body>
-
 </html>

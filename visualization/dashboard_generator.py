@@ -1,6 +1,9 @@
 import os
 import json
+from collections import Counter
 from datetime import datetime
+from typing import Dict, Any, List
+
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
 
@@ -9,6 +12,59 @@ from logger import get_logger
 from database import DatabaseManager
 
 logger = get_logger(__name__)
+
+# Common words to exclude when auto-detecting franchises
+_STOP_WORDS = {
+    "the",
+    "of",
+    "and",
+    "a",
+    "in",
+    "for",
+    "to",
+    "is",
+    "on",
+    "at",
+    "by",
+    "an",
+    "it",
+    "with",
+    "from",
+    "edition",
+    "game",
+    "video",
+    "-",
+    "&",
+    ":",
+    "new",
+    "pro",
+    "set",
+    "kit",
+}
+
+
+def _detect_franchises(
+    df: pd.DataFrame, top_n: int = 8
+) -> List[Dict[str, Any]]:
+    """
+    Auto-detect product franchises by finding the most common
+    significant words across all product names.
+    """
+    word_counts: Counter[str] = Counter()
+    for name in df["name"].dropna():
+        words = name.split()
+        for word in words:
+            cleaned = word.strip("()[]{}:,.-!?").title()
+            if len(cleaned) >= 3 and cleaned.lower() not in _STOP_WORDS:
+                word_counts[cleaned] += 1
+
+    # Only keep words that appear in more than one product
+    franchises = [
+        {"name": word, "count": count}
+        for word, count in word_counts.most_common(top_n)
+        if count > 1
+    ]
+    return franchises
 
 
 def generate_dashboard(
@@ -53,24 +109,8 @@ def generate_dashboard(
             else:
                 availability_label = "Stock Level Low"
 
-    # 2. Franchise Stats (Simple heuristic)
-    keywords = [
-        "Zelda",
-        "Mario",
-        "Metal Gear",
-        "Gran Turismo",
-        "Halo",
-        "Persona",
-        "Pokemon",
-        "Final Fantasy",
-    ]
-    from typing import Dict, Any, List
-
-    franchise_data: List[Dict[str, Any]] = []
-    for key in keywords:
-        count = len(df[df["name"].str.contains(key, case=False)])
-        if count > 0:
-            franchise_data.append({"name": key, "count": count})
+    # 2. Franchise Stats (auto-detect from most common words in product names)
+    franchise_data: List[Dict[str, Any]] = _detect_franchises(df)
     franchise_data.sort(key=lambda x: int(x["count"]), reverse=True)
 
     # 3. Price Distribution (Dynamic Bins)
