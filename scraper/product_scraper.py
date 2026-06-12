@@ -4,6 +4,7 @@ Static Product Scraper
 Uses Requests and BeautifulSoup to scrape static HTML.
 """
 
+import re
 import time
 from typing import List, Optional
 import requests
@@ -72,7 +73,12 @@ class StaticScraper(BaseScraper):
                 logger.error(f"Error scraping {url}: {e}")
                 consecutive_empty += 1
                 if consecutive_empty >= 3:
+                    logger.info("Stopping: 3 consecutive failed pages.")
                     break
+                # Skip the failing page instead of hot-looping on it,
+                # and back off politely before the next request.
+                page += 1
+                time.sleep(self.delay)
 
         return all_products
 
@@ -116,10 +122,8 @@ class StaticScraper(BaseScraper):
     @staticmethod
     def _extract_price(card: Tag) -> float:
         """Extract price from a product card using regex."""
-        import re
-
         text = card.get_text(separator=" ", strip=True)
-        match = re.search(r"(\d{1,3}(?:[.,]\d{2})?)\s*€", text)
+        match = re.search(r"(\d+(?:[.,]\d{2})?)\s*€", text)
         if match:
             return float(match.group(1).replace(",", "."))
         return 0.0

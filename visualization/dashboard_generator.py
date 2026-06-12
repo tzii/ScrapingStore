@@ -1,17 +1,25 @@
-import os
 import json
 from collections import Counter
 from datetime import datetime
-from typing import Dict, Any, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
 
 from config import DASHBOARD_HTML_PATH, TEMPLATES_DIR
-from logger import get_logger
 from database import DatabaseManager
+from logger import get_logger
 
 logger = get_logger(__name__)
+
+_PRODUCT_COLUMNS = (
+    "name",
+    "price",
+    "availability",
+    "image_url",
+    "scraped_at",
+)
 
 # Common words to exclude when auto-detecting franchises
 _STOP_WORDS = {
@@ -43,6 +51,33 @@ _STOP_WORDS = {
 }
 
 
+def _normalize_products_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Return dashboard-ready product data with stable columns and values."""
+    normalized = df.copy()
+    defaults: Dict[str, Any] = {
+        "name": "",
+        "price": 0.0,
+        "availability": "Unknown",
+        "image_url": None,
+        "scraped_at": None,
+    }
+    for column, default in defaults.items():
+        if column not in normalized.columns:
+            normalized[column] = default
+
+    normalized["name"] = normalized["name"].fillna("").astype(str)
+    normalized["price"] = (
+        pd.to_numeric(normalized["price"], errors="coerce")
+        .replace([float("inf"), float("-inf")], 0.0)
+        .fillna(0.0)
+        .clip(lower=0.0)
+    )
+    normalized["availability"] = (
+        normalized["availability"].fillna("Unknown").astype(str)
+    )
+    return normalized
+
+
 def _detect_franchises(df: pd.DataFrame, top_n: int = 8) -> List[Dict[str, Any]]:
     """
     Auto-detect product franchises by finding the most common
@@ -50,130 +85,132 @@ def _detect_franchises(df: pd.DataFrame, top_n: int = 8) -> List[Dict[str, Any]]
     """
     word_counts: Counter[str] = Counter()
     for name in df["name"].dropna():
-        words = name.split()
-        for word in words:
+        for word in name.split():
             cleaned = word.strip("()[]{}:,.-!?").title()
             if len(cleaned) >= 3 and cleaned.lower() not in _STOP_WORDS:
                 word_counts[cleaned] += 1
 
-    # Only keep words that appear in more than one product
-    franchises = [
+    return [
         {"name": word, "count": count}
         for word, count in word_counts.most_common(top_n)
         if count > 1
     ]
-    return franchises
 
 
-def generate_dashboard(
-    db: DatabaseManager, output_path: str = str(DASHBOARD_HTML_PATH)
-) -> str:
-    """
-    Generate the Modern HTML dashboard with Tailwind/Alpine/Grid.js.
-    """
-    logger.info("Generating Sleek Dashboard...")
+def _top_products(df: pd.DataFrame, n: int = 10) -> List[Dict[str, Any]]:
+    """Return the n most expensive products for the insights panel."""
+    top = df.sort_values("price", ascending=False).head(n)
+    return _json_records(top[["name", "price", "availability"]])
 
-    # Get Data
-    df = db.get_products_df()
 
-    if df.empty:
-        logger.warning("No data to generate dashboard.")
-        return output_path
+def _json_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Convert a DataFrame into browser-safe, JSON-compatible records."""
+    payload = df.to_json(orient="records", date_format="iso")
+    records = json.loads(payload)
+    return list(records)
 
-    # --- Backend Logic (KPIs & Stats) ---
 
-    # 1. KPIs
-    total_products = len(df)
-    avg_price = df["price"].mean() if not df.empty else 0
-    premium_count = len(df[df["price"] > 85])
+def _availability_stats(df: pd.DataFrame) -> Tuple[Dict[str, int], str, str]:
+    """Calculate availability counts, percentage, and health label."""
+    total = len(df)
+    statuses = df["availability"].str.strip().str.casefold()
+    in_stock = int((statuses == "in stock").sum())
+    out_of_stock = int((statuses == "out of stock").sum())
+    unknown = max(total - in_stock - out_of_stock, 0)
 
-    # Dynamic Availability
-    # Assuming 'availability' column has "In Stock" / "Out of Stock" from cleaner
-    in_stock_count = 0
-    availability_pct = "0%"
-    availability_label = "No Data"
-
-    if "availability" in df.columns:
-        in_stock_count = len(
-            df[df["availability"].str.contains("In Stock", case=False, na=False)]
+    if total == 0:
+        return (
+            {"in_stock": 0, "out_of_stock": 0, "unknown": 0},
+            "0%",
+            "No Data",
         )
-        if total_products > 0:
-            pct = (in_stock_count / total_products) * 100
-            availability_pct = f"{int(pct)}%"
-            if pct > 80:
-                availability_label = "Stock Level Healthy"
-            elif pct > 50:
-                availability_label = "Stock Level Moderate"
-            else:
-                availability_label = "Stock Level Low"
 
-    # 2. Franchise Stats (auto-detect from most common words in product names)
-    franchise_data: List[Dict[str, Any]] = _detect_franchises(df)
-    franchise_data.sort(key=lambda x: int(x["count"]), reverse=True)
-
-    # 3. Price Distribution (Dynamic Bins)
-    # create ~8 bins based on min-max
-    hist_labels = []
-    hist_counts = []
-
-    if not df.empty and total_products > 0:
-        min_p = int(df["price"].min())
-        max_p = int(df["price"].max())
-        if max_p > min_p:
-            # Create 8 bins
-            step = max(5, (max_p - min_p) // 8)
-            # Round step to nice number (5, 10, 20 etc)
-            if step > 10:
-                step = (step // 10) * 10
-
-            for i in range(min_p, max_p + step, step):
-                end = i + step
-                count = len(df[(df["price"] >= i) & (df["price"] < end)])
-                if count > 0:  # Only add if has data or keep all? Keep all for range
-                    hist_labels.append(f"{i}-{end}")
-                    hist_counts.append(count)
-        else:
-            hist_labels = [f"{min_p}-{min_p+10}"]
-            hist_counts = [total_products]
+    percentage = (in_stock / total) * 100
+    if percentage > 80:
+        label = "Stock Level Healthy"
+    elif percentage > 50:
+        label = "Stock Level Moderate"
     else:
-        hist_labels = ["No Data"]
-        hist_counts = [0]
+        label = "Stock Level Low"
 
-    chart_json = json.dumps({"labels": hist_labels, "counts": hist_counts})
+    counts = {
+        "in_stock": in_stock,
+        "out_of_stock": out_of_stock,
+        "unknown": unknown,
+    }
+    return counts, f"{int(percentage)}%", label
 
-    # 4. JSON Serialization
-    # Convert DataFrame to list of dicts for Grid.js
-    products_list = df.to_dict(orient="records")
-    products_json = json.dumps(products_list, default=str)
-    franchise_json = json.dumps(franchise_data)
 
-    # --- Render Template ---
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
+def _price_histogram(prices: pd.Series) -> Dict[str, List[Any]]:
+    """Build compact histogram labels and counts for Chart.js."""
+    if prices.empty:
+        return {"labels": ["No Data"], "counts": [0]}
 
-    try:
-        template = env.get_template("dashboard_modern_template.html")
-    except Exception as e:
-        logger.error(f"Template not found: {e}")
-        raise
+    min_price = int(prices.min())
+    max_price = int(prices.max())
+    if max_price == min_price:
+        return {"labels": [f"{min_price}-{min_price + 10}"], "counts": [len(prices)]}
 
-    context = {
-        "timestamp": datetime.now().strftime("%b %d, %Y • %H:%M"),
-        "products_json": products_json,
-        "franchise_json": franchise_json,
-        "kpi_total": total_products,
-        "kpi_avg": f"{avg_price:.2f}",
-        "kpi_premium": premium_count,
-        "kpi_availability_pct": availability_pct,
+    step = max(5, (max_price - min_price) // 8)
+    if step > 10:
+        step = (step // 10) * 10
+
+    labels: List[str] = []
+    counts: List[int] = []
+    for start in range(min_price, max_price + step, step):
+        end = start + step
+        count = int(((prices >= start) & (prices < end)).sum())
+        if count:
+            labels.append(f"{start}-{end}")
+            counts.append(count)
+    return {"labels": labels, "counts": counts}
+
+
+def _build_context(df: pd.DataFrame) -> Dict[str, Any]:
+    """Build the complete template context from normalized product data."""
+    total_products = len(df)
+    prices = df["price"]
+    average_price = float(prices.mean()) if total_products else 0.0
+    min_price = float(prices.min()) if total_products else 0.0
+    max_price = float(prices.max()) if total_products else 0.0
+    availability, availability_pct, availability_label = _availability_stats(df)
+    generated_at = datetime.now().astimezone()
+
+    return {
+        "timestamp": generated_at.strftime("%b %d, %Y • %H:%M"),
+        "generated_iso": generated_at.isoformat(timespec="seconds"),
+        "products": _json_records(df[list(_PRODUCT_COLUMNS)]),
+        "franchises": _detect_franchises(df),
+        "top_products": _top_products(df),
+        "kpi": {
+            "total": total_products,
+            "avg": f"{average_price:.2f}",
+            "premium": int((prices > 85).sum()),
+            "avail_pct": availability_pct,
+        },
+        "kpi_min": f"{min_price:.2f}",
+        "kpi_max": f"{max_price:.2f}",
         "kpi_availability_label": availability_label,
-        "chart_data_json": chart_json,
+        "chart_data": _price_histogram(prices),
+        "availability": availability,
     }
 
-    html_content = template.render(context)
 
-    # Save
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(html_content)
+def generate_dashboard(db: DatabaseManager, output_path: Optional[str] = None) -> str:
+    """Generate the modern HTML dashboard."""
+    logger.info("Generating dashboard...")
+    df = _normalize_products_df(db.get_products_df())
 
-    logger.info(f"Dashboard saved to {output_path}")
-    return output_path
+    env = Environment(
+        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        keep_trailing_newline=True,
+    )
+    template = env.get_template("dashboard_modern_template.html")
+    html_content = template.render(_build_context(df))
+
+    destination = Path(output_path) if output_path else DASHBOARD_HTML_PATH
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(html_content, encoding="utf-8")
+
+    logger.info(f"Dashboard saved to {destination}")
+    return str(destination)

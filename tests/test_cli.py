@@ -2,12 +2,23 @@
 Tests for the CLI commands.
 """
 
-import pytest
 from unittest.mock import patch, MagicMock
+from pathlib import Path
+
 from typer.testing import CliRunner
+
+from config import DOCS_DASHBOARD_HTML_PATH, DOCS_TERMINAL_DASHBOARD_HTML_PATH
 from main import app
 
 runner = CliRunner()
+
+
+def test_no_args_shows_help():
+    """Running the CLI without a command should not start a scrape."""
+    result = runner.invoke(app, [])
+    assert result.exit_code == 0
+    assert "Usage" in result.stdout
+    assert "scrape" in result.stdout
 
 
 @patch("main.DatabaseManager")
@@ -40,6 +51,7 @@ def test_export_command(mock_db_cls):
 
     result = runner.invoke(app, ["export"])
     assert result.exit_code == 0
+    mock_db.init_db.assert_called_once()
     mock_db.export_for_powerbi.assert_called_once()
 
 
@@ -54,4 +66,26 @@ def test_generate_report_command(mock_db_cls, mock_dashboard, mock_terminal):
 
     result = runner.invoke(app, ["generate-report"])
     assert result.exit_code == 0
-    mock_dashboard.assert_called_once()
+    mock_db.init_db.assert_called_once()
+    mock_dashboard.assert_called_once_with(mock_db, output_path=None)
+    mock_terminal.assert_called_once_with([], output_path=None)
+
+
+@patch("main.generate_terminal_dashboard")
+@patch("main.generate_dashboard")
+@patch("main.DatabaseManager")
+def test_generate_report_docs_paths(mock_db_cls, mock_dashboard, mock_terminal):
+    """The docs flag should target the GitHub Pages files."""
+    mock_db = MagicMock()
+    mock_db.get_all_products.return_value = []
+    mock_db_cls.return_value = mock_db
+
+    result = runner.invoke(app, ["generate-report", "--docs"])
+
+    assert result.exit_code == 0
+    assert Path(mock_dashboard.call_args.kwargs["output_path"]) == (
+        DOCS_DASHBOARD_HTML_PATH
+    )
+    assert Path(mock_terminal.call_args.kwargs["output_path"]) == (
+        DOCS_TERMINAL_DASHBOARD_HTML_PATH
+    )

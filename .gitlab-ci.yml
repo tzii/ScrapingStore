@@ -1,0 +1,51 @@
+workflow:
+  rules:
+    # Run merge request pipelines
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Avoid duplicate pipelines when a branch has an open MR
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # Run branch pipelines (e.g. main)
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - lint
+  - test
+
+default:
+  image: python:3.11-slim
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install -r requirements-dev.txt
+    - pip install --no-deps -e .
+  cache:
+    key:
+      files:
+        - requirements.txt
+        - requirements-dev.txt
+    paths:
+      - .cache/pip
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+lint:
+  stage: lint
+  script:
+    - black --check .
+    - flake8 .
+
+typecheck:
+  stage: lint
+  script:
+    - mypy cleaning scraper visualization *.py --ignore-missing-imports
+
+test:
+  stage: test
+  script:
+    - pytest --cov --cov-report=term-missing --junitxml=report.xml
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml

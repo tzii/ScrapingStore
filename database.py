@@ -4,7 +4,9 @@ Database Manager
 Handles database connections and operations using SQLModel.
 """
 
-from typing import List, Optional
+from pathlib import Path
+from typing import List
+
 import pandas as pd
 from sqlmodel import Session, SQLModel, create_engine, select
 
@@ -27,7 +29,7 @@ class DatabaseManager:
     def save_products(self, products: List[Product]):
         """
         Save a list of products to the database with Upsert logic.
-        Updates existing products (matched by source_url) and inserts new ones.
+        Updates existing products matched by name and inserts new ones.
         """
         if not products:
             return
@@ -41,13 +43,17 @@ class DatabaseManager:
                 ).first()
 
                 if existing_product:
-                    # Update fields
-                    existing_product.name = product.name
-                    existing_product.price = product.price
-                    existing_product.availability = product.availability
-                    existing_product.image_url = product.image_url
-                    existing_product.scraped_at = product.scraped_at
-                    # Add simple log if prices changed? (Optional)
+                    for field in (
+                        "price",
+                        "currency",
+                        "availability",
+                        "image_url",
+                        "source_url",
+                        "scraped_at",
+                        "category",
+                        "rating",
+                    ):
+                        setattr(existing_product, field, getattr(product, field))
                     session.add(existing_product)
                 else:
                     session.add(product)
@@ -67,16 +73,18 @@ class DatabaseManager:
         products = self.get_all_products()
         return pd.DataFrame([p.model_dump() for p in products])
 
-    def export_for_powerbi(self, output_path: str = str(CSV_POWERBI_PATH)):
+    def export_for_powerbi(self, output_path: str = str(CSV_POWERBI_PATH)) -> bool:
         """
         Export database content to a Power BI-compatible CSV.
+
+        Returns True when a file is written, otherwise False.
         """
         logger.info("Exporting data for Power BI...")
         df = self.get_products_df()
 
         if df.empty:
             logger.warning("No data to export.")
-            return
+            return False
 
         # Power BI Transformations
         # 1. Clean column names
@@ -92,5 +100,12 @@ class DatabaseManager:
             )
 
         # 3. Export with BOM for Excel/Power BI compatibility
-        df.to_csv(output_path, index=False, encoding="utf-8-sig")
-        logger.info(f"Power BI export saved to {output_path}")
+        destination = Path(output_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(destination, index=False, encoding="utf-8-sig")
+        logger.info(f"Power BI export saved to {destination}")
+        return True
+
+    def close(self) -> None:
+        """Release pooled database connections."""
+        self.engine.dispose()

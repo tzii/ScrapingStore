@@ -2,7 +2,6 @@
 Tests for the data cleaning pipeline.
 """
 
-import pytest
 from models import Product
 from cleaning.data_cleaner import clean_products
 

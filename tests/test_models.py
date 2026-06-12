@@ -2,6 +2,8 @@
 Tests for Product model validation.
 """
 
+import math
+
 import pytest
 from models import Product
 
@@ -33,8 +35,15 @@ def test_product_whitespace_name_raises():
 
 def test_product_negative_price_raises():
     """Test that negative price raises ValueError."""
-    with pytest.raises(ValueError, match="Price must be non-negative"):
+    with pytest.raises(ValueError, match="finite non-negative"):
         Product(name="Test", source_url="http://test.com", price=-5.0)
+
+
+@pytest.mark.parametrize("price", [math.inf, -math.inf, math.nan])
+def test_product_non_finite_price_raises(price):
+    """NaN and infinity must not leak into JSON or analytics."""
+    with pytest.raises(ValueError, match="finite non-negative"):
+        Product(name="Test", source_url="http://test.com", price=price)
 
 
 def test_product_zero_price_allowed():

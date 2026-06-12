@@ -1,50 +1,34 @@
-import json
-import os
 from datetime import datetime
+from pathlib import Path
+from typing import List, Optional
+
 from jinja2 import Environment, FileSystemLoader
 
-from typing import List
-from models import Product
-from config import TEMPLATES_DIR, DATA_DIR
+from config import TERMINAL_DASHBOARD_HTML_PATH, TEMPLATES_DIR
 from logger import get_logger
+from models import Product
 
 logger = get_logger(__name__)
 
 
-def generate_terminal_dashboard(products: List[Product]):
-    """
-    Generates the retro terminal-style HTML dashboard.
-    """
-    if not products:
-        logger.warning("No products to display in terminal dashboard.")
-        return
-
-    def json_serial(obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        raise TypeError(f"Type {type(obj)} not serializable")
-
-    products_data = [p.model_dump() for p in products]
-    products_json = json.dumps(products_data, default=json_serial)
-
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
-
-    try:
-        template = env.get_template("dashboard_terminal_template.html")
-    except Exception as e:
-        logger.error(f"Terminal dashboard template not found: {e}")
-        raise
-
+def generate_terminal_dashboard(
+    products: List[Product], output_path: Optional[str] = None
+) -> str:
+    """Generate the terminal-style HTML dashboard."""
+    env = Environment(
+        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        keep_trailing_newline=True,
+    )
+    template = env.get_template("dashboard_terminal_template.html")
     context = {
-        "products_json": products_json,
+        "products": [product.model_dump(mode="json") for product in products],
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
-
     html_content = template.render(context)
 
-    output_path = DATA_DIR / "dashboard_terminal.html"
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(html_content)
+    destination = Path(output_path) if output_path else TERMINAL_DASHBOARD_HTML_PATH
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(html_content, encoding="utf-8")
 
-    logger.info(f"Terminal dashboard saved to {output_path}")
+    logger.info(f"Terminal dashboard saved to {destination}")
+    return str(destination)

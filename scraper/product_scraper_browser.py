@@ -6,8 +6,12 @@ Uses Playwright for dynamic scraping with true concurrency.
 
 import asyncio
 import re
-from typing import List, Optional
-from playwright.async_api import async_playwright, Page, BrowserContext
+from typing import Any, List, Optional
+from playwright.async_api import (
+    async_playwright,
+    BrowserContext,
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 from scraper.base import BaseScraper
 from models import Product
@@ -37,7 +41,7 @@ class BrowserScraper(BaseScraper):
     @staticmethod
     def _extract_price(text: str) -> float:
         """Extract price from card text using regex."""
-        match = re.search(r"(\d{1,3}(?:[.,]\d{2})?)\s*€", text)
+        match = re.search(r"(\d+(?:[.,]\d{2})?)\s*€", text)
         if match:
             return float(match.group(1).replace(",", "."))
         return 0.0
@@ -56,80 +60,71 @@ class BrowserScraper(BaseScraper):
         logger.info(f"Starting browser scrape of {self.base_url}")
 
         async with async_playwright() as p:
-            # Launch browser
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(user_agent=USER_AGENT_FALLBACK)
-
             all_products = []
             page_num = 1
             consecutive_empty = 0
-            # Limit concurrency to 3 to be polite but faster than serial
             semaphore = asyncio.Semaphore(3)
 
-            # We must loop to allow stopping early
-            while True:
-                if max_pages and page_num > max_pages:
-                    break
-
-                # Create a batch of tasks (e.g., 3 pages at a time) to run concurrently
-                # but ensure we can check the results of this batch before launching the next 100
-                batch_size = 3
-                tasks = []
-
-                # Prepare batch
-                current_batch_pages = []
-                for i in range(batch_size):
-                    if max_pages and (page_num + i) > max_pages:
+            try:
+                while not max_pages or page_num <= max_pages:
+                    urls = self._batch_urls(page_num, max_pages)
+                    if not urls:
                         break
-                    p_idx = page_num + i
-                    url = (
-                        f"{self.base_url}?page={p_idx}" if p_idx > 1 else self.base_url
-                    )
-                    tasks.append(self._scrape_single_page(context, url, semaphore))
-                    current_batch_pages.append(p_idx)
 
-                if not tasks:
-                    break
+                    tasks = [
+                        self._scrape_single_page(context, url, semaphore)
+                        for url in urls
+                    ]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    batch_products = self._collect_results(results)
+                    all_products.extend(batch_products)
 
-                # Run batch
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                # Process results
-                batch_has_products = False
-                for res in results:
-                    if isinstance(res, list):
-                        if res:
-                            all_products.extend(res)
-                            batch_has_products = True
-                        # Loop logic for empty check:
-                        # If a page was empty, we shouldn't necessarily stop immediately if parallel pages had content,
-                        # but if the WHOLE batch is empty, that's a strong signal.
-                        # The user asked for "Stop after N empty pages".
-                        # For simplicity in concurrent mode: if the entire batch yields 0 products, we count it.
+                    if batch_products:
+                        consecutive_empty = 0
                     else:
-                        logger.error(f"Page error: {res}")
+                        consecutive_empty += 1
+                        if consecutive_empty >= 2:
+                            logger.info("Stopping: consecutive empty batches.")
+                            break
 
-                if not batch_has_products:
-                    consecutive_empty += (
-                        1  # We count batches as units here for simplicity
-                    )
-                    if consecutive_empty >= 2:  # Stop after 2 empty batches (~6 pages)
-                        logger.info("Stopping: Consecutive empty batches.")
-                        break
-                else:
-                    consecutive_empty = 0
-
-                # Advance page counter
-                page_num += len(tasks)
-
-                # Respect Delay between batches
-                if self.delay > 0:
-                    await asyncio.sleep(self.delay)
-
-            await browser.close()
+                    page_num += len(urls)
+                    if self.delay > 0:
+                        await asyncio.sleep(self.delay)
+            finally:
+                await browser.close()
 
             logger.info(f"Browser scrape complete. Total products: {len(all_products)}")
             return all_products
+
+    def _batch_urls(
+        self, page_num: int, max_pages: Optional[int], batch_size: int = 3
+    ) -> List[str]:
+        """Build the next bounded batch of paginated URLs."""
+        urls = []
+        for offset in range(batch_size):
+            current_page = page_num + offset
+            if max_pages and current_page > max_pages:
+                break
+            url = (
+                f"{self.base_url}?page={current_page}"
+                if current_page > 1
+                else self.base_url
+            )
+            urls.append(url)
+        return urls
+
+    @staticmethod
+    def _collect_results(results: List[Any]) -> List[Product]:
+        """Collect successful page results and log page-level failures."""
+        products = []
+        for result in results:
+            if isinstance(result, list):
+                products.extend(result)
+            else:
+                logger.error(f"Page error: {result}")
+        return products
 
     async def _scrape_single_page(
         self, context: BrowserContext, url: str, semaphore: asyncio.Semaphore
@@ -146,7 +141,7 @@ class BrowserScraper(BaseScraper):
                 # Wait for content to render
                 try:
                     await page.wait_for_selector("div.product-card", timeout=5000)
-                except:
+                except PlaywrightTimeoutError:
                     # If timeout, we proceed to count (which will be 0)
                     pass
 
@@ -189,11 +184,12 @@ class BrowserScraper(BaseScraper):
                             )
                         )
                     except Exception as e:
+                        logger.debug(f"Skipping unparsable card on {url}: {e}")
                         continue
 
             except Exception as e:
-                logger.error(f"Failed to scrape {url}: {e}")
-                raise e
+                logger.exception(f"Failed to scrape {url}: {e}")
+                raise
             finally:
                 await page.close()
 
