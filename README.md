@@ -204,7 +204,7 @@ pytest --cov=scraper --cov=cleaning --cov=visualization --cov-report=term-missin
 
 ### Visualization (`visualization/`)
 
-- **Modern Dashboard**: Tailwind CSS, Chart.js (price distribution, segment doughnut), Grid.js (searchable/sortable product table), Alpine.js (dark mode toggle)
+- **Modern Dashboard**: Tailwind CSS glass UI with aurora backdrop, Chart.js (price histogram, availability doughnut), Grid.js table with search, sorting, availability/price-range filters and client-side CSV export, top-10 price leaderboard, animated KPI counters, Alpine.js dark/light mode (system-aware, persisted), reduced-motion and aria support
 - **Terminal Dashboard**: Retro CRT-style with ASCII bar charts, auto-calculated KPIs
 - Auto-detected franchise/keyword analysis (no hardcoded keywords)
 

@@ -65,6 +65,13 @@ def _detect_franchises(df: pd.DataFrame, top_n: int = 8) -> List[Dict[str, Any]]
     return franchises
 
 
+def _top_products(df: pd.DataFrame, n: int = 10) -> List[Dict[str, Any]]:
+    """Return the n most expensive products for the insights panel."""
+    cols = [c for c in ("name", "price", "availability") if c in df.columns]
+    top = df.sort_values("price", ascending=False).head(n)
+    return [dict(rec) for rec in top[cols].to_dict(orient="records")]
+
+
 def generate_dashboard(
     db: DatabaseManager, output_path: str = str(DASHBOARD_HTML_PATH)
 ) -> str:
@@ -110,6 +117,25 @@ def generate_dashboard(
     # 2. Franchise Stats (auto-detect from most common words in product names)
     franchise_data: List[Dict[str, Any]] = _detect_franchises(df)
     franchise_data.sort(key=lambda x: int(x["count"]), reverse=True)
+
+    # 2b. Additional stats for the redesigned dashboard
+    min_price = float(df["price"].min())
+    max_price = float(df["price"].max())
+
+    out_of_stock_count = 0
+    if "availability" in df.columns:
+        out_of_stock_count = int(
+            df["availability"].str.contains("Out of Stock", case=False, na=False).sum()
+        )
+    unknown_count = max(total_products - in_stock_count - out_of_stock_count, 0)
+    availability_json = json.dumps(
+        {
+            "in_stock": in_stock_count,
+            "out_of_stock": out_of_stock_count,
+            "unknown": unknown_count,
+        }
+    )
+    top_products_json = json.dumps(_top_products(df), default=str)
 
     # 3. Price Distribution (Dynamic Bins)
     # create ~8 bins based on min-max
@@ -158,14 +184,19 @@ def generate_dashboard(
 
     context = {
         "timestamp": datetime.now().strftime("%b %d, %Y • %H:%M"),
+        "generated_iso": datetime.now().astimezone().isoformat(timespec="seconds"),
         "products_json": products_json,
         "franchise_json": franchise_json,
         "kpi_total": total_products,
         "kpi_avg": f"{avg_price:.2f}",
+        "kpi_min": f"{min_price:.2f}",
+        "kpi_max": f"{max_price:.2f}",
         "kpi_premium": premium_count,
         "kpi_availability_pct": availability_pct,
         "kpi_availability_label": availability_label,
         "chart_data_json": chart_json,
+        "availability_json": availability_json,
+        "top_products_json": top_products_json,
     }
 
     html_content = template.render(context)
