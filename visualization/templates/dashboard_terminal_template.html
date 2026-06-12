@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SCRAPESTORE // TERMINAL v4.0</title>
+    <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -288,7 +289,7 @@
         </div>
     </main>
 
-    <script id="products-data" type="application/json">{{ products_json | safe }}</script>
+    <script id="products-data" type="application/json">{{ products | tojson }}</script>
     <script>
         const products = JSON.parse(document.getElementById('products-data').textContent);
         const total = products.length;
@@ -300,6 +301,12 @@
         const maxP = prices.length ? prices[prices.length - 1] : 0;
         const median = prices.length ? prices[Math.floor(prices.length / 2)] : 0;
         const stdDev = Math.sqrt(prices.reduce((s, p) => s + Math.pow(p - avg, 2), 0) / (prices.length || 1));
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
 
         // Clock
         setInterval(() => {
@@ -385,7 +392,7 @@
             row.className = 'fran-row';
             const dotsLen = Math.max(2, 30 - name.length - String(count).length);
             const dots = '·'.repeat(dotsLen);
-            row.innerHTML = `<span class="fran-marker">▸</span><span class="fran-name glow-amber">${name.toUpperCase()}</span><span class="fran-dots">${dots}</span><span class="fran-count">[${count}]</span>`;
+            row.innerHTML = `<span class="fran-marker">▸</span><span class="fran-name glow-amber">${escapeHtml(name.toUpperCase())}</span><span class="fran-dots">${dots}</span><span class="fran-count">[${count}]</span>`;
             franList.appendChild(row);
         });
 
@@ -401,7 +408,7 @@
                 div.className = 'log-line';
                 const time = new Date().toLocaleTimeString('en-US', { hour12: false });
                 const truncName = p.name.length > 22 ? p.name.substring(0, 22) + '…' : p.name;
-                div.innerHTML = `<span class="log-ts">[${time}]</span> ${truncName} <span class="log-ok">OK</span> <span class="log-price">(€${p.price.toFixed(2)})</span>`;
+                div.innerHTML = `<span class="log-ts">[${time}]</span> ${escapeHtml(truncName)} <span class="log-ok">OK</span> <span class="log-price">(€${p.price.toFixed(2)})</span>`;
                 if (logFeed.firstChild) logFeed.insertBefore(div, logFeed.firstChild);
                 else logFeed.appendChild(div);
             }

@@ -30,7 +30,7 @@ A complete end-to-end data engineering portfolio project demonstrating web scrap
 | **Visualization** | Chart.js, Grid.js, Alpine.js, Jinja2 HTML dashboards (modern + terminal) |
 | **Database** | SQLModel ORM, SQLite, upsert logic |
 | **Data Export** | Power BI-ready CSV (UTF-8 BOM), automated pipeline |
-| **DevOps** | Docker, GitHub Actions CI, pre-commit hooks, pytest |
+| **DevOps** | Docker, GitHub Actions, GitLab CI, pre-commit hooks, pytest |
 
 ---
 
@@ -91,6 +91,7 @@ ScrapingStore/
 ├── logger.py                       # Logging configuration (Rich)
 ├── main.py                         # CLI pipeline orchestrator (Typer)
 ├── requirements.txt
+├── requirements-dev.txt
 ├── Dockerfile
 ├── docker-compose.yml
 └── README.md
@@ -119,6 +120,9 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Install development tools instead
+pip install -r requirements-dev.txt
+
 # Install Playwright browsers
 playwright install chromium
 ```
@@ -140,6 +144,9 @@ python main.py scrape --pages 10 --delay 2.0
 
 # Use browser scraper for JS-rendered pages
 python main.py scrape --type browser --pages 5
+
+# Show available commands without starting a scrape
+python main.py
 ```
 
 ### Other Commands
@@ -150,6 +157,9 @@ python main.py export
 
 # Regenerate dashboards from existing data
 python main.py generate-report
+
+# Regenerate the GitHub Pages site in docs/
+python main.py generate-report --docs
 ```
 
 ### Configuration
@@ -161,6 +171,10 @@ BASE_URL="https://sandbox.oxylabs.io/products"
 MAX_RETRIES=3
 DEFAULT_TIMEOUT=30
 DB_NAME="products.db"
+# Optional output locations (default: ./data and ./docs)
+SCRAPINGSTORE_HOME="/path/to/workspace"
+DATA_DIR="/path/to/data"
+DOCS_DIR="/path/to/docs"
 ```
 
 ### Running Tests
@@ -178,9 +192,11 @@ pytest --cov=scraper --cov=cleaning --cov=visualization --cov-report=term-missin
 
 | File | Description |
 |------|-------------|
-| `products_powerbi.csv` | Power BI-ready export (UTF-8 BOM) |
-| `dashboard.html` | Interactive modern dashboard |
-| `dashboard_terminal.html` | Terminal-style dashboard |
+| `data/products_powerbi.csv` | Power BI-ready export (UTF-8 BOM) |
+| `data/dashboard.html` | Interactive modern dashboard |
+| `data/dashboard_terminal.html` | Terminal-style dashboard |
+| `docs/index.html` | GitHub Pages modern dashboard (`--docs`) |
+| `docs/dashboard_terminal.html` | GitHub Pages terminal dashboard (`--docs`) |
 
 ---
 
@@ -210,8 +226,8 @@ pytest --cov=scraper --cov=cleaning --cov=visualization --cov-report=term-missin
 
 ### Data Models (`models.py`)
 
-- SQLModel/Pydantic hybrid with field validators
-- Price must be non-negative; name must not be empty
+- SQLModel/Pydantic hybrid with model validation
+- Price must be finite and non-negative; name must not be empty
 - Automatic UTC timestamps on creation
 
 #### Terminal Dashboard Mode
@@ -275,5 +291,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  <b>Made by Simone</b> • Student Project • 2025
+  <b>Made by Simone</b> • Student Project • 2026
 </p>

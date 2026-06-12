@@ -3,7 +3,6 @@ Shared test fixtures for ScrapingStore test suite.
 """
 
 import pytest
-from sqlmodel import SQLModel, create_engine, Session
 
 from database import DatabaseManager
 from models import Product
@@ -44,11 +43,12 @@ def empty_html_bytes() -> bytes:
 
 
 @pytest.fixture
-def db_manager() -> DatabaseManager:
+def db_manager():
     """In-memory database manager for testing."""
-    db = DatabaseManager("sqlite:///")
+    db = DatabaseManager("sqlite://")
     db.init_db()
-    return db
+    yield db
+    db.close()
 
 
 @pytest.fixture

@@ -10,6 +10,7 @@
     <meta property="og:description" content="Live product data dashboard from the ScrapingStore portfolio project." />
     <meta property="og:image" content="https://tzii.github.io/ScrapingStore/assets/dashboard_modern.png" />
     <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="data:,">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -199,7 +200,7 @@
         <section id="overview" class="pt-10 pb-8 anim-in">
             <p class="text-[11px] font-mono uppercase tracking-[0.25em] text-accent mb-3">Product Intelligence</p>
             <h2 class="text-3xl lg:text-5xl font-black tracking-tight font-display leading-tight">Market snapshot,<br class="hidden lg:block"> beautifully decoded.</h2>
-            <p class="mt-3 text-sm max-w-xl" style="color:var(--text-secondary);">{{ kpi_total }} products scraped, cleaned and analyzed by the ScrapingStore pipeline. Last updated <time datetime="{{ generated_iso }}">{{ timestamp }}</time>.</p>
+            <p class="mt-3 text-sm max-w-xl" style="color:var(--text-secondary);">{{ kpi.total }} products scraped, cleaned and analyzed by the ScrapingStore pipeline. Last updated <time datetime="{{ generated_iso }}">{{ timestamp }}</time>.</p>
         </section>
 
         <!-- KPI cards -->
@@ -320,12 +321,12 @@
         <p class="text-[11px] font-mono tracking-wide" style="color:var(--text-secondary);">Generated on {{ timestamp }} &middot; ScrapingStore Analytics &middot; Made by Simone</p>
     </footer>
 
-    <script id="products-data" type="application/json">{{ products_json | safe }}</script>
-    <script id="franchise-data" type="application/json">{{ franchise_json | safe }}</script>
-    <script id="top-products-data" type="application/json">{{ top_products_json | safe }}</script>
-    <script id="availability-data" type="application/json">{{ availability_json | safe }}</script>
-    <script id="kpi-data" type="application/json">{"total": {{ kpi_total }}, "avg": "{{ kpi_avg }}", "premium": {{ kpi_premium }}, "avail_pct": "{{ kpi_availability_pct }}"}</script>
-    <script id="chart-data" type="application/json">{{ chart_data_json | safe }}</script>
+    <script id="products-data" type="application/json">{{ products | tojson }}</script>
+    <script id="franchise-data" type="application/json">{{ franchises | tojson }}</script>
+    <script id="top-products-data" type="application/json">{{ top_products | tojson }}</script>
+    <script id="availability-data" type="application/json">{{ availability | tojson }}</script>
+    <script id="kpi-data" type="application/json">{{ kpi | tojson }}</script>
+    <script id="chart-data" type="application/json">{{ chart_data | tojson }}</script>
 
     <script>
         document.addEventListener('alpine:init', () => {
@@ -346,6 +347,12 @@
         const kpiData = JSON.parse(document.getElementById('kpi-data').textContent);
         const chartData = JSON.parse(document.getElementById('chart-data').textContent);
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
 
         function animateCount(el, target, suffix, duration) {
             suffix = suffix || '';
@@ -418,7 +425,11 @@
                     this.applyFilters();
                 },
                 downloadCsv() {
-                    const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+                    const esc = value => {
+                        let text = String(value == null ? '' : value);
+                        if (/^[=+\-@]/.test(text)) text = "'" + text;
+                        return '"' + text.replace(/"/g, '""') + '"';
+                    };
                     const header = ['name', 'price', 'availability', 'image_url', 'scraped_at'];
                     const lines = [header.join(',')];
                     this.filteredData.forEach(p => { lines.push(header.map(k => esc(p[k])).join(',')); });
@@ -503,7 +514,7 @@
                             { name: 'Status', width: '30%', formatter: (cell) => {
                                 const c = String(cell || '');
                                 const color = c.includes('In Stock') ? '#34d399' : c.includes('Out') ? '#fb7185' : '#64748b';
-                                return gridjs.html('<span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:7px;height:7px;border-radius:9999px;background:' + color + ';display:inline-block;"></span>' + c + '</span>');
+                                return gridjs.html('<span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:7px;height:7px;border-radius:9999px;background:' + color + ';display:inline-block;"></span>' + escapeHtml(c) + '</span>');
                             } }
                         ],
                         data: this.rows(this.filteredData),

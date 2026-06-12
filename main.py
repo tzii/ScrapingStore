@@ -4,23 +4,31 @@ ScrapingStore CLI
 Main entry point for the application.
 """
 
-import typer
-from typing import Optional
 from enum import Enum
 import time
+from typing import Optional
 
-from models import Product
-from visualization.dashboard_generator import generate_dashboard
-from visualization.terminal_dashboard_generator import generate_terminal_dashboard
-from config import BASE_URL
-from logger import setup_logger, get_logger
+import typer
+
+from cleaning.data_cleaner import clean_products
+from config import (
+    BASE_URL,
+    DOCS_DASHBOARD_HTML_PATH,
+    DOCS_TERMINAL_DASHBOARD_HTML_PATH,
+)
 from database import DatabaseManager
+from logger import get_logger, setup_logger
+from models import Product
+from scraper.base import BaseScraper
 from scraper.product_scraper import StaticScraper
 from scraper.product_scraper_browser import BrowserScraper
-from cleaning.data_cleaner import clean_products
-from scraper.base import BaseScraper
+from visualization.dashboard_generator import generate_dashboard
+from visualization.terminal_dashboard_generator import generate_terminal_dashboard
 
-app = typer.Typer(help="ScrapingStore Data Pipeline CLI")
+app = typer.Typer(
+    help="ScrapingStore Data Pipeline CLI",
+    invoke_without_command=True,
+)
 logger = get_logger("main")
 
 
@@ -30,20 +38,41 @@ class ScraperType(str, Enum):
 
 
 @app.callback()
-def setup(verbose: bool = False):
+def setup(ctx: typer.Context, verbose: bool = False):
     """
     Global setup (logging).
     """
     level = "DEBUG" if verbose else "INFO"
     setup_logger(level)
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+
+
+def _create_scraper(scraper_type: ScraperType, delay: float) -> BaseScraper:
+    """Create the requested scraper implementation."""
+    if scraper_type == ScraperType.static:
+        return StaticScraper(base_url=BASE_URL, delay=delay)
+    return BrowserScraper(base_url=BASE_URL, delay=delay)
+
+
+def _generate_pipeline_dashboards(
+    db: DatabaseManager, cleaned_products: list[Product]
+) -> None:
+    """Generate both dashboards, falling back to existing database data."""
+    logger.info("Generating dashboard...")
+    generate_dashboard(db)
+    products = cleaned_products or db.get_all_products()
+    generate_terminal_dashboard(products)
 
 
 @app.command()
 def scrape(
-    type: ScraperType = typer.Option(ScraperType.static, help="Type of scraper to use"),
-    pages: Optional[int] = typer.Option(10, help="Max pages to scrape"),
-    all: bool = typer.Option(False, "--all", help="Scrape all available pages"),
-    delay: float = typer.Option(1.0, help="Delay between requests (seconds)"),
+    scraper_type: ScraperType = typer.Option(
+        ScraperType.static, "--type", help="Type of scraper to use"
+    ),
+    pages: Optional[int] = typer.Option(10, min=1, help="Max pages to scrape"),
+    all_pages: bool = typer.Option(False, "--all", help="Scrape all available pages"),
+    delay: float = typer.Option(1.0, min=0.0, help="Delay between requests (seconds)"),
     export: bool = typer.Option(True, help="Export to Power BI CSV after scraping"),
     dashboard: bool = typer.Option(True, help="Generate dashboard after scraping"),
 ):
@@ -52,10 +81,10 @@ def scrape(
     """
     start_time = time.time()
 
-    max_pages = None if all else pages
+    max_pages = None if all_pages else pages
     logger.info(
-        f"Starting pipeline using {type.value} scraper"
-        f" ({'all pages' if all else f'{max_pages} pages'})..."
+        f"Starting pipeline using {scraper_type.value} scraper"
+        f" ({'all pages' if all_pages else f'{max_pages} pages'})..."
     )
 
     # 1. Initialize DB
@@ -63,11 +92,7 @@ def scrape(
     db.init_db()
 
     # 2. Select Scraper
-    scraper: BaseScraper
-    if type == ScraperType.static:
-        scraper = StaticScraper(base_url=BASE_URL, delay=delay)
-    else:
-        scraper = BrowserScraper(base_url=BASE_URL, delay=delay)
+    scraper = _create_scraper(scraper_type, delay)
 
     # 3. Scrape
     try:
@@ -92,19 +117,7 @@ def scrape(
 
     # 7. Dashboard
     if dashboard:
-        logger.info("Generating dashboard...")
-        # We pass the DB manager to the dashboard generator so it can query stats
-        generate_dashboard(db)
-        if cleaned_products:
-            generate_terminal_dashboard(cleaned_products)
-        else:
-            # If no new products, fall back to existing DB data
-            try:
-                existing = db.get_all_products()
-                if existing:
-                    generate_terminal_dashboard(existing)
-            except Exception as e:
-                logger.warning(f"Could not generate terminal dashboard from DB: {e}")
+        _generate_pipeline_dashboards(db, cleaned_products)
 
     duration = time.time() - start_time
     logger.info(f"Pipeline completed in {duration:.2f} seconds.")
@@ -116,29 +129,29 @@ def export():
     Export existing database data to Power BI CSV.
     """
     db = DatabaseManager()
+    db.init_db()
     db.export_for_powerbi()
 
 
 @app.command()
-def generate_report():
+def generate_report(
+    docs: bool = typer.Option(
+        False,
+        "--docs",
+        help="Write GitHub Pages files to docs/ instead of data/.",
+    ),
+):
     """
     Generate the HTML dashboard from existing data.
     """
     db = DatabaseManager()
-    generate_dashboard(db)
+    db.init_db()
+    dashboard_path = str(DOCS_DASHBOARD_HTML_PATH) if docs else None
+    terminal_path = str(DOCS_TERMINAL_DASHBOARD_HTML_PATH) if docs else None
 
-    try:
-        products = db.get_all_products()
-        if products:
-            generate_terminal_dashboard(products)
-    except Exception as e:
-        logger.warning(f"Could not generate terminal dashboard from DB: {e}")
+    generate_dashboard(db, output_path=dashboard_path)
+    generate_terminal_dashboard(db.get_all_products(), output_path=terminal_path)
 
 
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) == 1:
-        # Default to 'scrape' command if no args provided
-        sys.argv.append("scrape")
     app()

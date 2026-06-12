@@ -16,12 +16,13 @@ default:
   image: python:3.11-slim
   before_script:
     - python -m pip install --upgrade pip
-    - pip install -r requirements.txt
-    - pip install -e .[dev]
+    - pip install -r requirements-dev.txt
+    - pip install --no-deps -e .
   cache:
     key:
       files:
         - requirements.txt
+        - requirements-dev.txt
     paths:
       - .cache/pip
 
@@ -32,8 +33,7 @@ lint:
   stage: lint
   script:
     - black --check .
-    - flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-    - flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - flake8 .
 
 typecheck:
   stage: lint
@@ -43,7 +43,7 @@ typecheck:
 test:
   stage: test
   script:
-    - pytest --cov=scraper --cov=cleaning --cov=visualization --cov-report=term-missing --junitxml=report.xml
+    - pytest --cov --cov-report=term-missing --junitxml=report.xml
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     when: always

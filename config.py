@@ -36,7 +36,9 @@ def _env_float(name: str, default: float) -> float:
 
 # Base Paths
 BASE_DIR = Path(__file__).parent
-DATA_DIR = BASE_DIR / "data"
+PROJECT_DIR = Path(os.getenv("SCRAPINGSTORE_HOME", Path.cwd())).expanduser().resolve()
+DATA_DIR = Path(os.getenv("DATA_DIR", PROJECT_DIR / "data")).expanduser().resolve()
+DOCS_DIR = Path(os.getenv("DOCS_DIR", PROJECT_DIR / "docs")).expanduser().resolve()
 ASSETS_DIR = BASE_DIR / "assets"
 TEMPLATES_DIR = BASE_DIR / "visualization" / "templates"
 
@@ -50,6 +52,9 @@ CSV_RAW_PATH = DATA_DIR / "products_raw.csv"
 CSV_CLEANED_PATH = DATA_DIR / "products_cleaned.csv"
 CSV_POWERBI_PATH = DATA_DIR / "products_powerbi.csv"
 DASHBOARD_HTML_PATH = DATA_DIR / "dashboard.html"
+TERMINAL_DASHBOARD_HTML_PATH = DATA_DIR / "dashboard_terminal.html"
+DOCS_DASHBOARD_HTML_PATH = DOCS_DIR / "index.html"
+DOCS_TERMINAL_DASHBOARD_HTML_PATH = DOCS_DIR / "dashboard_terminal.html"
 
 # Scraper Settings
 BASE_URL = os.getenv("BASE_URL", "https://sandbox.oxylabs.io/products")

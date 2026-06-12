@@ -4,8 +4,10 @@ Tests for the StaticScraper module.
 
 import pytest
 from unittest.mock import Mock, patch
+
+from bs4 import BeautifulSoup
+
 from scraper.product_scraper import StaticScraper
-from models import Product
 
 
 @pytest.fixture
@@ -131,8 +133,6 @@ def test_static_scraper_retry_on_error(mock_session):
 
 def test_extract_price_euro_comma():
     """Test price extraction with European comma format."""
-    from bs4 import BeautifulSoup
-
     html = '<div class="product-card"><h4>Test</h4>88,99 €</div>'
     card = BeautifulSoup(html, "html.parser").find("div")
     assert StaticScraper._extract_price(card) == 88.99
@@ -140,8 +140,6 @@ def test_extract_price_euro_comma():
 
 def test_extract_price_euro_dot():
     """Test price extraction with dot format."""
-    from bs4 import BeautifulSoup
-
     html = '<div class="product-card"><h4>Test</h4>88.99 €</div>'
     card = BeautifulSoup(html, "html.parser").find("div")
     assert StaticScraper._extract_price(card) == 88.99
@@ -149,32 +147,24 @@ def test_extract_price_euro_dot():
 
 def test_extract_price_missing():
     """Test price extraction when no price is present."""
-    from bs4 import BeautifulSoup
-
     html = '<div class="product-card"><h4>Test</h4>No price here</div>'
     card = BeautifulSoup(html, "html.parser").find("div")
     assert StaticScraper._extract_price(card) == 0.0
 
 
 def test_extract_availability_in_stock():
-    from bs4 import BeautifulSoup
-
     html = '<div class="product-card"><h4>Test</h4>In Stock</div>'
     card = BeautifulSoup(html, "html.parser").find("div")
     assert StaticScraper._extract_availability(card) == "In Stock"
 
 
 def test_extract_availability_out_of_stock():
-    from bs4 import BeautifulSoup
-
     html = '<div class="product-card"><h4>Test</h4>Out of Stock</div>'
     card = BeautifulSoup(html, "html.parser").find("div")
     assert StaticScraper._extract_availability(card) == "Out of Stock"
 
 
 def test_extract_availability_unknown():
-    from bs4 import BeautifulSoup
-
     html = '<div class="product-card"><h4>Test</h4>Something else</div>'
     card = BeautifulSoup(html, "html.parser").find("div")
     assert StaticScraper._extract_availability(card) == "Unknown"
@@ -182,8 +172,6 @@ def test_extract_availability_unknown():
 
 def test_extract_price_four_digits():
     """Test price extraction supports prices of 1000 or more."""
-    from bs4 import BeautifulSoup
-
     html = '<div class="product-card"><h4>Test</h4>1059.99 €</div>'
     card = BeautifulSoup(html, "html.parser").find("div")
     assert StaticScraper._extract_price(card) == 1059.99

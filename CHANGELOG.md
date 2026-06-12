@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-06-12
+### Added
+- Redesigned analytics dashboard with filters, CSV export, availability insights, and top-product rankings.
+- GitLab CI support and a `generate-report --docs` command for publishing GitHub Pages output.
+- Regression tests for empty dashboards, safe data embedding, complete upserts, and CLI lifecycle behavior.
+
+### Fixed
+- Updated all mutable product fields during database upserts.
+- Initialized the database for export and report-only commands.
+- Escaped embedded dashboard data and dynamic HTML to prevent scraped content from injecting scripts.
+- Aligned the Playwright Python package and Docker browser image versions.
+- Rejected non-finite prices that would break JSON and analytics.
+- Included dashboard templates in built wheels and made output paths workspace-relative.
+
+### Changed
+- Running the CLI without a command now displays help instead of starting a network scrape.
+- Runtime and development dependencies are split between `requirements.txt` and `requirements-dev.txt`.
+- CI now enforces the full Flake8 configuration instead of reporting style failures without failing.
+
 ## [1.1.1] - 2026-02-22
 ### Fixed
 - Fixed availability KPI showing raw decimal instead of percentage in modern dashboard.

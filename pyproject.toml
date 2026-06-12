@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scrapingstore"
-version = "1.1.1"
+version = "1.2.0"
 description = "A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration."
 authors = [
     {name = "Simone"},
@@ -15,15 +15,18 @@ license = "MIT"
 dependencies = [
     "requests",
     "beautifulsoup4",
-    "playwright",
-    "pandas",
-    "jinja2",
+    "playwright==1.60.0",
+    "pandas>=2.0,<3.0",
+    "jinja2>=3.1",
     "sqlmodel>=0.0.14",
     "pydantic>=2.0",
     "typer",
     "rich",
     "python-dotenv",
 ]
+
+[project.scripts]
+scrapingstore = "main:app"
 
 [project.optional-dependencies]
 dev = [
@@ -42,10 +45,16 @@ include = ["scraper*", "cleaning*", "visualization*"]
 exclude = ["data*", "assets*", "tests*", "docs*"]
 
 [tool.setuptools]
-py-modules = ["models", "database", "config", "logger"]
+py-modules = ["models", "database", "config", "logger", "main"]
+
+[tool.setuptools.package-data]
+visualization = ["templates/*.html"]
 
 [tool.isort]
 profile = "black"
+
+[tool.black]
+target-version = ["py39"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -55,4 +64,18 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "error::ResourceWarning",
+]
 
+[tool.coverage.run]
+source = [
+    "cleaning",
+    "scraper",
+    "visualization",
+    "config",
+    "database",
+    "logger",
+    "main",
+    "models",
+]

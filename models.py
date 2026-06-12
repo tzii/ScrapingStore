@@ -5,6 +5,7 @@ SQLModel definitions for the application.
 """
 
 from datetime import datetime, timezone
+from math import isfinite
 from typing import Any, Optional
 from sqlmodel import Field, SQLModel
 
@@ -33,5 +34,5 @@ class Product(SQLModel, table=True):
         if not self.name:
             raise ValueError("Product name must not be empty")
         # Validate price
-        if self.price < 0:
-            raise ValueError("Price must be non-negative")
+        if not isfinite(self.price) or self.price < 0:
+            raise ValueError("Price must be a finite non-negative number")

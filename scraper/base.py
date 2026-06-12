@@ -6,7 +6,7 @@ Abstract base class for product scrapers.
 
 from abc import ABC, abstractmethod
 from typing import List, Optional
-import time
+
 from models import Product
 from logger import get_logger
 from config import BASE_URL
