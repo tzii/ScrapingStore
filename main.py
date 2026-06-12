@@ -98,10 +98,13 @@ def scrape(
         if cleaned_products:
             generate_terminal_dashboard(cleaned_products)
         else:
-            # If no new products, try to get from DB for terminal dashboard
-            # Note: generate_terminal_dashboard expects a list of Product objects.
-            # We might need to fetch them if cleaned_products is empty but DB has data.
-            pass
+            # If no new products, fall back to existing DB data
+            try:
+                existing = db.get_all_products()
+                if existing:
+                    generate_terminal_dashboard(existing)
+            except Exception as e:
+                logger.warning(f"Could not generate terminal dashboard from DB: {e}")
 
     duration = time.time() - start_time
     logger.info(f"Pipeline completed in {duration:.2f} seconds.")

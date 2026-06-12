@@ -11,6 +11,29 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+
+def _env_int(name: str, default: int) -> int:
+    """Read an integer env var, falling back to default on invalid values."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    """Read a float env var, falling back to default on invalid values."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 # Base Paths
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
@@ -30,9 +53,9 @@ DASHBOARD_HTML_PATH = DATA_DIR / "dashboard.html"
 
 # Scraper Settings
 BASE_URL = os.getenv("BASE_URL", "https://sandbox.oxylabs.io/products")
-DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", 30))
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", 3))
-RETRY_BACKOFF = float(os.getenv("RETRY_BACKOFF", 0.5))
+DEFAULT_TIMEOUT = _env_int("DEFAULT_TIMEOUT", 30)
+MAX_RETRIES = _env_int("MAX_RETRIES", 3)
+RETRY_BACKOFF = _env_float("RETRY_BACKOFF", 0.5)
 USER_AGENT_FALLBACK = os.getenv(
     "USER_AGENT",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

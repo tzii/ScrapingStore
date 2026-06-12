@@ -7,7 +7,11 @@ Uses Playwright for dynamic scraping with true concurrency.
 import asyncio
 import re
 from typing import List, Optional
-from playwright.async_api import async_playwright, Page, BrowserContext
+from playwright.async_api import (
+    async_playwright,
+    BrowserContext,
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 from scraper.base import BaseScraper
 from models import Product
@@ -37,7 +41,7 @@ class BrowserScraper(BaseScraper):
     @staticmethod
     def _extract_price(text: str) -> float:
         """Extract price from card text using regex."""
-        match = re.search(r"(\d{1,3}(?:[.,]\d{2})?)\s*€", text)
+        match = re.search(r"(\d+(?:[.,]\d{2})?)\s*€", text)
         if match:
             return float(match.group(1).replace(",", "."))
         return 0.0
@@ -146,7 +150,7 @@ class BrowserScraper(BaseScraper):
                 # Wait for content to render
                 try:
                     await page.wait_for_selector("div.product-card", timeout=5000)
-                except:
+                except PlaywrightTimeoutError:
                     # If timeout, we proceed to count (which will be 0)
                     pass
 
@@ -189,11 +193,12 @@ class BrowserScraper(BaseScraper):
                             )
                         )
                     except Exception as e:
+                        logger.debug(f"Skipping unparsable card on {url}: {e}")
                         continue
 
             except Exception as e:
                 logger.error(f"Failed to scrape {url}: {e}")
-                raise e
+                raise
             finally:
                 await page.close()
 

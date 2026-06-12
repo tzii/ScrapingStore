@@ -232,6 +232,18 @@ The `products_powerbi.csv` file is formatted for seamless Power BI import:
 
 ---
 
+## 🤝 Responsible Scraping
+
+This project targets a public scraping sandbox explicitly intended for practice. When adapting it to other sites:
+
+- **Check `robots.txt` and the site's Terms of Service** before scraping
+- **Keep a delay between requests** (`--delay`, default 1s) and do not raise the browser concurrency limit
+- **Identify your client honestly** via the `USER_AGENT` env var where appropriate
+- **Never scrape private, personal, or paywalled data**, and never bypass authentication or captchas
+- **Fail gracefully**: both scrapers back off and stop after repeated failures instead of hammering the server
+
+---
+
 ## ⚠️ Known Limitations
 
 - **Static scraper vs. JS-rendered sites**: The `static` scraper uses `requests` + BeautifulSoup, which cannot execute JavaScript. The target sandbox site is JS-rendered, so **use `--type browser`** for actual scraping. The static scraper is included to demonstrate the pattern and works with server-rendered HTML.

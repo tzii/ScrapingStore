@@ -178,3 +178,27 @@ def test_extract_availability_unknown():
     html = '<div class="product-card"><h4>Test</h4>Something else</div>'
     card = BeautifulSoup(html, "html.parser").find("div")
     assert StaticScraper._extract_availability(card) == "Unknown"
+
+
+def test_extract_price_four_digits():
+    """Test price extraction supports prices of 1000 or more."""
+    from bs4 import BeautifulSoup
+
+    html = '<div class="product-card"><h4>Test</h4>1059.99 €</div>'
+    card = BeautifulSoup(html, "html.parser").find("div")
+    assert StaticScraper._extract_price(card) == 1059.99
+
+
+@patch("scraper.product_scraper.StaticScraper._create_session")
+def test_static_scraper_error_skips_page(mock_session):
+    """Test that a failing page is skipped instead of retried in a tight loop."""
+    session = Mock()
+    session.get.side_effect = Exception("Connection error")
+    mock_session.return_value = session
+
+    scraper = StaticScraper(base_url="http://test.com", delay=0)
+    products = scraper.scrape(max_pages=1)
+
+    assert products == []
+    # Page counter advances on error, so with max_pages=1 only one request is made
+    assert session.get.call_count == 1

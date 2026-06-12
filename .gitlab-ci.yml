@@ -1,0 +1,41 @@
+stages:
+  - lint
+  - test
+
+default:
+  image: python:3.11-slim
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+    - pip install -e .[dev]
+  cache:
+    key:
+      files:
+        - requirements.txt
+    paths:
+      - .cache/pip
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+lint:
+  stage: lint
+  script:
+    - black --check .
+    - flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+    - flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+typecheck:
+  stage: lint
+  script:
+    - mypy cleaning scraper visualization *.py --ignore-missing-imports
+
+test:
+  stage: test
+  script:
+    - pytest --cov=scraper --cov=cleaning --cov=visualization --cov-report=term-missing --junitxml=report.xml
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
