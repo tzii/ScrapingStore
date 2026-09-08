@@ -2,8 +2,6 @@
 Tests for the DatabaseManager module.
 """
 
-import pytest
-from database import DatabaseManager
 from models import Product
 
 
@@ -23,16 +21,61 @@ def test_save_and_get_products(db_manager):
 
 
 def test_upsert_updates_existing(db_manager):
-    """Test that saving a product with the same name updates it."""
-    p1 = Product(name="Old Name", source_url="http://test.com/1", price=10.0)
+    """Test that saving a product with the same source identity updates it."""
+    p1 = Product(
+        name="Old Name",
+        source_id="stable-1",
+        source_url="http://test.com/1",
+        price=10.0,
+    )
     db_manager.save_products([p1])
 
-    p2 = Product(name="Old Name", source_url="http://test.com/1", price=50.0)
+    p2 = Product(
+        name="Old Name",
+        source_id="stable-1",
+        source_url="http://test.com/1",
+        price=50.0,
+    )
     db_manager.save_products([p2])
 
     saved = db_manager.get_all_products()
     assert len(saved) == 1
     assert saved[0].price == 50.0
+
+
+def test_upsert_updates_all_mutable_fields(db_manager):
+    """Upserts should not leave stale metadata behind."""
+    original = Product(
+        name="Product",
+        source_id="stable-2",
+        source_url="http://example.test/old-listing",
+        price=10.0,
+        currency="EUR",
+        category="Old",
+        rating=1.0,
+    )
+    updated = Product(
+        name="Product",
+        source_id="stable-2",
+        source_url="http://example.test/new-listing",
+        price=12.0,
+        currency="USD",
+        availability="In Stock",
+        image_url="new.jpg",
+        category="New",
+        rating=4.5,
+    )
+
+    db_manager.save_products([original])
+    db_manager.save_products([updated])
+
+    saved = db_manager.get_all_products()[0]
+    assert saved.source_url == "http://example.test/new-listing"
+    assert saved.currency == "USD"
+    assert saved.availability == "In Stock"
+    assert saved.image_url == "new.jpg"
+    assert saved.category == "New"
+    assert saved.rating == 4.5
 
 
 def test_get_products_df(db_manager):
@@ -62,6 +105,15 @@ def test_export_powerbi(db_manager, tmp_path):
     assert "P1" in content
 
 
+def test_export_powerbi_creates_parent_directory(db_manager, tmp_path):
+    """Exporting to a nested path should create missing directories."""
+    db_manager.save_products([Product(name="P1", source_url="u1", price=10)])
+    output_file = tmp_path / "nested" / "export.csv"
+
+    assert db_manager.export_for_powerbi(str(output_file)) is True
+    assert output_file.exists()
+
+
 def test_save_empty_list(db_manager):
     """Test that saving an empty list is a no-op."""
     db_manager.save_products([])
@@ -72,3 +124,10 @@ def test_get_products_df_empty(db_manager):
     """Test DataFrame from empty DB."""
     df = db_manager.get_products_df()
     assert df.empty
+
+
+def test_export_empty_database_returns_false(db_manager, tmp_path):
+    output_file = tmp_path / "export.csv"
+
+    assert db_manager.export_for_powerbi(str(output_file)) is False
+    assert not output_file.exists()

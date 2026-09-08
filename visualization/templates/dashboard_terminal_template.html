@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SCRAPESTORE // TERMINAL v4.0</title>
+    <title>SCRAPESTORE // TERMINAL v2.0.0</title>
+    <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -18,12 +19,12 @@
             --amber: #ff9f1c;
             --cyan: #0ef6cc;
             --red: #ff3333;
-            --dim: #3a4a3a;
+            --dim: #809680;
             --text: #88aa88;
             --font: 'IBM Plex Mono', monospace;
         }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; overflow: hidden; }
+        html, body { height: 100vh; min-height: 720px; }
         body {
             background: var(--bg);
             color: var(--text);
@@ -106,8 +107,8 @@
         main {
             flex: 1;
             display: grid;
-            grid-template-columns: 240px 1fr 280px;
-            grid-template-rows: 1fr 1fr;
+            grid-template-columns: 240px minmax(0, 1fr) 280px;
+            grid-template-rows: auto minmax(260px, 1fr) minmax(260px, 1fr);
             gap: 1px;
             background: var(--border);
             padding: 1px;
@@ -198,6 +199,27 @@
 
         .col-span-2 { grid-column: span 2; }
         .row-span-2 { grid-row: span 2; }
+        .price-layout { display: flex; gap: 24px; }
+        .price-histogram { flex: 1; min-width: 0; }
+        .price-summary { width: 180px; flex-shrink: 0; border-left: 1px dashed var(--border); padding-left: 16px; }
+        :focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
+        @media (max-width: 900px) {
+            html, body { height: auto; min-height: 100vh; }
+            main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+            .col-span-2, .row-span-2 { grid-column: auto; grid-row: auto; }
+            .panel { min-height: 180px; }
+            .panel-body { overflow-wrap: anywhere; }
+            nav { flex-wrap: wrap; gap: 12px; padding: 14px; }
+            nav > div { flex-wrap: wrap; }
+            #nav-clock { display: none; }
+            #log-feed { max-height: 360px; }
+            .price-layout { flex-direction: column; }
+            .price-summary { width: auto; border-left: 0; border-top: 1px dashed var(--border); padding: 16px 0 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+            .bar-fill { animation-delay: 0ms !important; }
+        }
     </style>
 </head>
 
@@ -206,12 +228,12 @@
     <nav>
         <div>
             <span class="glow-cyan nav-brand">▸ SCRAPESTORE_TERMINAL</span>
-            <span style="color:var(--dim); margin-left: 8px; font-size:10px;">v4.0</span>
+            <span style="color:var(--dim); margin-left: 8px; font-size:10px;">v2.0.0</span>
         </div>
         <div style="display:flex; align-items:center; gap:16px;">
             <span style="color:var(--dim); font-size:10px;" id="nav-clock">--:--:--</span>
-            <a href="index.html" class="nav-link">[ DASHBOARD ]</a>
-            <span class="glow flicker" style="font-size:10px;">SYSTEM NOMINAL <span class="blink">●</span></span>
+            <a href="{{ dashboard_href | e }}" class="nav-link">[ DASHBOARD ]</a>
+            <span class="glow flicker" style="font-size:10px;">CATALOG SNAPSHOT <span class="blink">●</span></span>
         </div>
     </nav>
 
@@ -223,12 +245,12 @@
                 <div class="kpi">
                     <div class="kpi-label">TOTAL_ITEMS</div>
                     <div class="kpi-val glow" id="t-count">0</div>
-                    <div class="kpi-sub" style="color:var(--green);">▲ COMPLETE</div>
+                    <div class="kpi-sub" style="color:var(--green);">{{ scope | e }}<br>{{ collection_label | e }}: {{ last_run.status | e if last_run else 'Not recorded' }}</div>
                 </div>
                 <div class="kpi">
-                    <div class="kpi-label">AVG_PRICE</div>
+                    <div class="kpi-label">AVG_KNOWN_EUR_PRICE</div>
                     <div class="kpi-val glow-cyan" id="t-price">0.00</div>
-                    <div class="kpi-sub" style="color:var(--dim);">EUR</div>
+                    <div class="kpi-sub" style="color:var(--dim);">{{ kpi.known_prices }} usable EUR prices / {{ kpi.missing_prices }} missing</div>
                 </div>
                 <div class="kpi">
                     <div class="kpi-label">STOCK_RATIO</div>
@@ -238,15 +260,26 @@
             </div>
         </div>
 
+        <section class="panel col-span-2" aria-labelledby="freshness-heading" id="freshness">
+            <div class="panel-hdr"><span id="freshness-heading">// OBSERVATION_FRESHNESS</span></div>
+            <div class="panel-body" style="font-size:12px;line-height:1.8;">
+                <span class="glow">{{ freshness.recent }} within 7 days</span> ·
+                <span class="glow-amber">{{ freshness.stale }} over 7 days old</span> ·
+                {{ freshness.unknown }} time not recorded
+                {% if freshness.future %} · {{ freshness.future }} after report time{% endif %}
+                <p>Age at report generation (UTC). Stock is the last observed signal.<br>Unseen products are not marked unavailable.</p>
+            </div>
+        </section>
+
         <!-- 02: Price Analysis -->
         <div class="panel col-span-2">
             <div class="panel-hdr"><span><span class="id">02</span>// PRICE_ANALYSIS</span><span class="controls">[─ □ ×]</span></div>
-            <div class="panel-body" style="display:flex; gap:24px;">
-                <div style="flex:1;">
+            <div class="panel-body price-layout">
+                <div class="price-histogram">
                     <div class="glow-cyan" style="margin-bottom:12px; font-size:11px; letter-spacing:1px;">&gt;&gt; PRICE_DISTRIBUTION</div>
                     <div id="ascii-chart"></div>
                 </div>
-                <div style="width:180px; border-left:1px dashed var(--border); padding-left:16px;">
+                <div class="price-summary">
                     <div class="glow-amber" style="margin-bottom:10px; font-size:11px; letter-spacing:1px;">&gt;&gt; SUMMARY</div>
                     <div style="font-size:11px; line-height:1.8;">
                         <div style="color:var(--dim);">Min Price</div>
@@ -270,7 +303,7 @@
 
         <!-- 05: Event Log -->
         <div class="panel">
-            <div class="panel-hdr"><span><span class="id">05</span>// EVENT_LOG</span><span class="controls">[↑↓]</span></div>
+            <div class="panel-hdr"><span><span class="id">05</span>// SNAPSHOT_REPLAY</span><span class="controls">[↑↓]</span></div>
             <div class="panel-body" id="log-feed"></div>
         </div>
 
@@ -279,8 +312,8 @@
             <div class="panel-hdr"><span><span class="id">06</span>// TERMINAL</span><span class="controls">[_]</span></div>
             <div class="panel-body" style="padding:0;">
                 <div style="padding:10px; height:100%; background:#010201;">
-                    <div style="color:var(--dim); margin-bottom:8px; font-size:10px;">Last login: {{ timestamp }} on ttys001</div>
-                    <div><span class="glow">user@scrapestore</span>:<span class="glow-cyan">~</span>$ python analyze.py --mode=deep</div>
+                    <div style="color:var(--dim); margin-bottom:8px; font-size:10px;">Report generated: {{ timestamp }}</div>
+                    <div><span class="glow">user@scrapestore</span>:<span class="glow-cyan">~</span>$ scrapingstore generate-report</div>
                     <div id="term-output" style="margin-top:6px;"></div>
                     <div style="margin-top:8px;"><span class="glow">user@scrapestore</span>:<span class="glow-cyan">~</span>$ <span class="blink" style="color:var(--green);">█</span></div>
                 </div>
@@ -288,67 +321,46 @@
         </div>
     </main>
 
-    <script id="products-data" type="application/json">{{ products_json | safe }}</script>
+    <script id="products-data" type="application/json">{{ products | tojson }}</script>
+    <script id="statistics-data" type="application/json">{{ statistics | tojson }}</script>
+    <script id="chart-data" type="application/json">{{ chart_data | tojson }}</script>
+    <script id="report-metadata" type="application/json">{{ {"scope": scope, "generated_at": generated_iso, "collection_label": collection_label, "latest_collection": last_run, "freshness": freshness} | tojson }}</script>
     <script>
         const products = JSON.parse(document.getElementById('products-data').textContent);
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const total = products.length;
-        const prices = products.map(p => p.price).filter(p => p > 0).sort((a, b) => a - b);
-        const avg = prices.reduce((a, b) => a + b, 0) / (prices.length || 1);
-        const inStock = products.filter(p => p.availability && p.availability.includes('In Stock')).length;
-        const stockPct = total > 0 ? (inStock / total) * 100 : 0;
-        const minP = prices.length ? prices[0] : 0;
-        const maxP = prices.length ? prices[prices.length - 1] : 0;
-        const median = prices.length ? prices[Math.floor(prices.length / 2)] : 0;
-        const stdDev = Math.sqrt(prices.reduce((s, p) => s + Math.pow(p - avg, 2), 0) / (prices.length || 1));
+        const statistics = JSON.parse(document.getElementById('statistics-data').textContent);
+        const chartData = JSON.parse(document.getElementById('chart-data').textContent);
+        const avg = statistics.average;
+        const stockPct = parseInt({{ kpi.avail_pct | tojson }}) || 0;
+        const minP = statistics.minimum;
+        const maxP = statistics.maximum;
+        const median = statistics.median;
+        const stdDev = statistics.std_dev;
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
 
         // Clock
         setInterval(() => {
             document.getElementById('nav-clock').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
         }, 1000);
 
-        // KPI typing animation
-        function typeNumber(el, target, duration) {
-            const isFloat = String(target).includes('.');
-            const num = parseFloat(target);
-            if (isNaN(num)) { el.textContent = target; return; }
-            const start = performance.now();
-            function tick(now) {
-                const p = Math.min((now - start) / duration, 1);
-                const e = 1 - Math.pow(1 - p, 3);
-                el.textContent = isFloat ? (num * e).toFixed(2) : Math.round(num * e);
-                if (p < 1) requestAnimationFrame(tick);
-            }
-            requestAnimationFrame(tick);
-        }
-
-        setTimeout(() => {
-            typeNumber(document.getElementById('t-count'), total, 1200);
-            typeNumber(document.getElementById('t-price'), avg.toFixed(2), 1200);
-            typeNumber(document.getElementById('t-stock'), Math.round(stockPct) + '%', 800);
-            const label = document.getElementById('t-stock-label');
-            if (stockPct > 80) { label.textContent = 'NOMINAL'; label.style.color = 'var(--green)'; }
-            else if (stockPct > 50) { label.textContent = 'MODERATE'; label.style.color = 'var(--amber)'; }
-            else { label.textContent = 'CRITICAL'; label.style.color = 'var(--red)'; }
-        }, 2000);
-
-        // Stats
-        setTimeout(() => {
-            document.getElementById('stat-min').textContent = '€' + minP.toFixed(2);
-            document.getElementById('stat-max').textContent = '€' + maxP.toFixed(2);
-            document.getElementById('stat-med').textContent = '€' + median.toFixed(2);
-            document.getElementById('stat-std').textContent = '±' + stdDev.toFixed(2);
-        }, 2200);
+        // Summary values describe the same stored catalog as the modern report.
+        document.getElementById('t-count').textContent = total;
+        document.getElementById('t-price').textContent = avg === null ? '—' : avg.toFixed(2);
+        document.getElementById('t-stock').textContent = stockPct + '%';
+        document.getElementById('t-stock-label').textContent = 'SHARE LISTED IN STOCK';
+        document.getElementById('stat-min').textContent = minP === null ? '—' : '€' + minP.toFixed(2);
+        document.getElementById('stat-max').textContent = maxP === null ? '—' : '€' + maxP.toFixed(2);
+        document.getElementById('stat-med').textContent = median === null ? '—' : '€' + median.toFixed(2);
+        document.getElementById('stat-std').textContent = stdDev === null ? '—' : '±' + stdDev.toFixed(2);
 
         // ASCII Chart
-        const binCount = 6;
-        const binStep = Math.max(5, Math.ceil((maxP - minP) / binCount));
-        const bins = [];
-        for (let i = 0; i < binCount; i++) {
-            const lo = Math.floor(minP) + i * binStep;
-            const hi = lo + binStep;
-            const count = prices.filter(p => p >= lo && p < hi).length;
-            bins.push({ label: `${lo}-${hi}`, count });
-        }
+        const bins = chartData.labels.map((label, index) => ({ label, count: chartData.counts[index] }));
         const maxBin = Math.max(...bins.map(b => b.count), 1);
         const chartDiv = document.getElementById('ascii-chart');
 
@@ -385,7 +397,7 @@
             row.className = 'fran-row';
             const dotsLen = Math.max(2, 30 - name.length - String(count).length);
             const dots = '·'.repeat(dotsLen);
-            row.innerHTML = `<span class="fran-marker">▸</span><span class="fran-name glow-amber">${name.toUpperCase()}</span><span class="fran-dots">${dots}</span><span class="fran-count">[${count}]</span>`;
+            row.innerHTML = `<span class="fran-marker">▸</span><span class="fran-name glow-amber">${escapeHtml(name.toUpperCase())}</span><span class="fran-dots">${dots}</span><span class="fran-count">[${count}]</span>`;
             franList.appendChild(row);
         });
 
@@ -399,9 +411,9 @@
                 const p = products[i];
                 const div = document.createElement('div');
                 div.className = 'log-line';
-                const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+                const time = p.scraped_at || 'Time not recorded';
                 const truncName = p.name.length > 22 ? p.name.substring(0, 22) + '…' : p.name;
-                div.innerHTML = `<span class="log-ts">[${time}]</span> ${truncName} <span class="log-ok">OK</span> <span class="log-price">(€${p.price.toFixed(2)})</span>`;
+                div.innerHTML = `<span class="log-ts">[${escapeHtml(time)}]</span> ${escapeHtml(truncName)} <span class="log-ok">${escapeHtml(p.freshness_label)}</span> <span class="log-price">(${p.price === null ? 'Price unavailable' : p.price.toFixed(2) + ' ' + escapeHtml(p.currency)})</span>`;
                 if (logFeed.firstChild) logFeed.insertBefore(div, logFeed.firstChild);
                 else logFeed.appendChild(div);
             }
@@ -409,14 +421,14 @@
             logIdx = end;
             if (logIdx < products.length) requestAnimationFrame(processLogBatch);
         }
-        setTimeout(() => requestAnimationFrame(processLogBatch), 2500);
+        setTimeout(() => requestAnimationFrame(processLogBatch), reducedMotion ? 0 : 2500);
 
         // Terminal output
         const termLines = [
             { text: '▸ Loading dataset... done (' + total + ' records)', delay: 2200 },
             { text: '▸ Computing statistics... done', delay: 2600 },
             { text: '▸ Rendering visualization... done', delay: 3000 },
-            { text: '▸ Export complete.', delay: 3400 },
+            { text: '▸ ' + {{ collection_label | tojson }} + ': ' + {{ (last_run.status if last_run else 'Not recorded') | tojson }}, delay: 3400 },
         ];
         const termOut = document.getElementById('term-output');
         termLines.forEach(line => {
@@ -425,7 +437,7 @@
                 div.style.cssText = 'color:#88aa88; font-size:11px; margin-bottom:2px;';
                 div.textContent = line.text;
                 termOut.appendChild(div);
-            }, line.delay);
+            }, reducedMotion ? 0 : line.delay);
         });
 
         // Boot sequence (Panel 03 replaced with status in summary panel)

@@ -2,7 +2,6 @@
 Tests for the data cleaning pipeline.
 """
 
-import pytest
 from models import Product
 from cleaning.data_cleaner import clean_products
 
@@ -56,12 +55,12 @@ def test_clean_availability_unknown_fallback():
 
 
 def test_clean_deduplication():
-    """Test removing duplicate products by name."""
+    """Different weak identities must not be collapsed by name."""
     p1 = Product(source_url="http://test.com/1", name="Duplicate", price=10.0)
     p2 = Product(source_url="http://test.com/2", name="Duplicate", price=20.0)
     cleaned = clean_products([p1, p2])
-    assert len(cleaned) == 1
-    assert cleaned[0].price == 10.0  # keeps first
+    assert len(cleaned) == 2
+    assert [p.price for p in cleaned] == [10.0, 20.0]
 
 
 def test_clean_strips_name_whitespace():

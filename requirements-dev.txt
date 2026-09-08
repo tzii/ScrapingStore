@@ -1,0 +1,10 @@
+-r requirements.txt
+
+pytest
+pytest-cov
+black
+flake8
+mypy
+pre-commit
+types-requests
+types-beautifulsoup4

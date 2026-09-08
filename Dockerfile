@@ -1,11 +1,12 @@
-# Use official Playwright image to ensure browsers are installed
-FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
+# Match the Python package version in requirements.txt so browser binaries
+# and the Playwright client stay compatible.
+FROM mcr.microsoft.com/playwright/python:v1.60.0-noble
 
 WORKDIR /app
 
 # Install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .

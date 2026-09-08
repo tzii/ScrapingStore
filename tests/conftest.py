@@ -3,7 +3,6 @@ Shared test fixtures for ScrapingStore test suite.
 """
 
 import pytest
-from sqlmodel import SQLModel, create_engine, Session
 
 from database import DatabaseManager
 from models import Product
@@ -14,23 +13,23 @@ SAMPLE_HTML = """
         <div class="product-card">
             <h4>Zelda: Breath of the Wild</h4>
             <img src="zelda.jpg">
-            59,99 € In Stock
+            <div class="price-wrapper">59,99 €</div><span class="availability">In Stock</span>
         </div>
         <div class="product-card">
             <h4>Mario Kart 8 Deluxe</h4>
             <img src="mario.jpg">
-            49,99 € In Stock
+            <div class="price-wrapper">49,99 €</div><span class="availability">In Stock</span>
         </div>
         <div class="product-card">
             <h4>Metal Gear Solid V</h4>
             <img src="mgs.jpg">
-            29,99 € Out of Stock
+            <div class="price-wrapper">29,99 €</div><span class="availability">Out of Stock</span>
         </div>
     </body>
 </html>
 """
 
-EMPTY_HTML = "<html><body></body></html>"
+EMPTY_HTML = '<html><body><p data-empty="true">No products</p></body></html>'
 
 
 @pytest.fixture
@@ -44,11 +43,12 @@ def empty_html_bytes() -> bytes:
 
 
 @pytest.fixture
-def db_manager() -> DatabaseManager:
+def db_manager():
     """In-memory database manager for testing."""
-    db = DatabaseManager("sqlite:///")
+    db = DatabaseManager("sqlite://")
     db.init_db()
-    return db
+    yield db
+    db.close()
 
 
 @pytest.fixture
@@ -57,6 +57,7 @@ def sample_products() -> list[Product]:
     return [
         Product(
             name="Zelda: Breath of the Wild",
+            source_id="1",
             source_url="http://test.com",
             price=59.99,
             availability="In Stock",
@@ -64,6 +65,7 @@ def sample_products() -> list[Product]:
         ),
         Product(
             name="Mario Kart 8 Deluxe",
+            source_id="2",
             source_url="http://test.com",
             price=49.99,
             availability="In Stock",
@@ -71,9 +73,19 @@ def sample_products() -> list[Product]:
         ),
         Product(
             name="Metal Gear Solid V",
+            source_id="3",
             source_url="http://test.com",
             price=29.99,
             availability="Out of Stock",
             image_url="mgs.jpg",
         ),
     ]
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-browser",
+        action="store_true",
+        default=False,
+        help="Run dashboard browser tests (requires npm ci and Playwright Chromium).",
+    )

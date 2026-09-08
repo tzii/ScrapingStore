@@ -1,64 +1,29 @@
-"""
-Data Cleaner Module
-===================
-Vectorized data cleaning pipeline using Pandas.
-"""
+"""Normalize observations without inventing prices or deduplicating by title."""
 
-from typing import List, Dict, Any, cast
-import pandas as pd
-import numpy as np
+from typing import List, Optional
+
 from models import Product
-from logger import get_logger
-
-logger = get_logger(__name__)
+from scraper.parsing import availability_signal
 
 
-def clean_products(products: List[Product]) -> List[Product]:
-    """
-    Clean a list of Product objects using vectorized Pandas operations.
-
-    Handles both pre-extracted data (price/availability already parsed by
-    the scraper) and legacy raw data where price may still need extraction.
-    """
-    if not products:
-        return []
-
-    logger.info(f"Cleaning {len(products)} products...")
-
-    df = pd.DataFrame([p.model_dump() for p in products])
-
-    # 1. Ensure price column exists and fill missing values
-    if "price" not in df.columns:
-        df["price"] = 0.0
-
-    df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(0.0)
-
-    # 2. Normalize availability to standard values
-    if "availability" in df.columns:
-        text_col = df["availability"].str.lower()
-        conditions = [
-            text_col.str.contains("in stock|add to basket", na=False),
-            text_col.str.contains("out of stock|unavailable", na=False),
-        ]
-        choices = ["In Stock", "Out of Stock"]
-        df["availability"] = np.select(conditions, choices, default="Unknown")
-    else:
-        df["availability"] = "Unknown"
-
-    # 3. Clean name
-    df["name"] = df["name"].str.strip()
-
-    # 4. Deduplicate by name
-    initial_count = len(df)
-    df.drop_duplicates(subset=["name"], keep="first", inplace=True)
-    removed = initial_count - len(df)
-    if removed > 0:
-        logger.info(f"Removed {removed} duplicates.")
-
-    # Convert back to Product objects
-    df = df.replace({np.nan: None})
-    records = cast(List[Dict[str, Any]], df.to_dict(orient="records"))
-    cleaned_products = [Product(**record) for record in records]
-
-    logger.info(f"Cleaning complete: {len(cleaned_products)} products ready.")
-    return cleaned_products
+def clean_products(
+    products: List[Product], warnings: Optional[List[str]] = None
+) -> List[Product]:
+    cleaned: List[Product] = []
+    seen: dict[str, Product] = {}
+    for original in products:
+        product = Product(**original.model_dump())
+        product.availability, reason = availability_signal(product.availability)
+        product.availability_reason = product.availability_reason or reason
+        previous = seen.get(product.source_key)
+        if previous is not None:
+            fields = ("name", "price", "currency", "availability", "product_url")
+            if any(getattr(previous, key) != getattr(product, key) for key in fields):
+                message = f"Conflicting observations for identity {product.source_key}; kept the first"
+                if warnings is None:
+                    raise ValueError(message)
+                warnings.append(message)
+            continue
+        seen[product.source_key] = product
+        cleaned.append(product)
+    return cleaned

@@ -1,0 +1,10 @@
+{
+  "name": "scrapingstore-browser-tests",
+  "private": true,
+  "description": "Pinned dashboard libraries for local browser regression tests",
+  "devDependencies": {
+    "alpinejs": "3.14.9",
+    "chart.js": "4.4.1",
+    "gridjs": "6.2.0"
+  }
+}
