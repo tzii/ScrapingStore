@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 import typer
 
 from cleaning.data_cleaner import clean_products
+from comparison import compare_observations
 from config import (
     BASE_URL,
     DATA_DIR,
@@ -267,6 +268,25 @@ def export():
     try:
         db.init_db()
         db.export_for_powerbi()
+    finally:
+        db.close()
+
+
+@app.command("compare-runs")
+def compare_runs(old: str, new: str):
+    """Compare OLD and NEW saved observations as JSON, in the supplied order."""
+    db = DatabaseManager()
+    try:
+        db.init_db()
+        old_products = db.get_run_products(old)
+        new_products = db.get_run_products(new)
+        payload = compare_observations(
+            db.get_run(old) or {}, db.get_run(new) or {}, old_products, new_products
+        )
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False))
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1)
     finally:
         db.close()
 

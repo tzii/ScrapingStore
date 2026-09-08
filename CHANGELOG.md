@@ -2,7 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [2.0.0] - 2026-09-08
+
+### Breaking changes
+
+- Scrapers return `ScrapeRunResult`; library callers read `.products` and inspect `.status` rather than receiving a plain list.
+- Unknown prices are nullable rather than zero; legacy database upgrades preserve a backup table and mark historical zeros `legacy_unknown`.
+
+### Added and improved
+
+- Compare immutable runs with `compare-runs OLD NEW`: name, availability and price changes, explicit one-sided observations, partial-run warnings and excluded weak identities.
+- Show seven-day observation freshness in both themes and per-product UTC times in the modern catalog, without inferring stock from absence.
+- Validate clean wheel installations on Linux and Windows with Python 3.9 and 3.13, including installed CLI commands and both bundled report templates.
+- Refresh the archived showcase, improve text contrast, make terminal layout responsive, respect reduced motion, and keep theme navigation available on phones.
 
 - Archive immutable per-run product observations with catalog updates and manifests in one transaction; retain newer catalog values when older collections finish later.
 - Add `runs`, `inspect-run --products`, and `generate-report --run-id` for inspecting and replaying saved collection evidence, including empty and partial runs.

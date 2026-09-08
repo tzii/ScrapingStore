@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SCRAPESTORE // TERMINAL v4.0</title>
+    <title>SCRAPESTORE // TERMINAL v2.0.0</title>
     <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,12 +19,12 @@
             --amber: #ff9f1c;
             --cyan: #0ef6cc;
             --red: #ff3333;
-            --dim: #3a4a3a;
+            --dim: #809680;
             --text: #88aa88;
             --font: 'IBM Plex Mono', monospace;
         }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; overflow: hidden; }
+        html, body { height: 100vh; min-height: 720px; }
         body {
             background: var(--bg);
             color: var(--text);
@@ -107,8 +107,8 @@
         main {
             flex: 1;
             display: grid;
-            grid-template-columns: 240px 1fr 280px;
-            grid-template-rows: 1fr 1fr;
+            grid-template-columns: 240px minmax(0, 1fr) 280px;
+            grid-template-rows: auto minmax(260px, 1fr) minmax(260px, 1fr);
             gap: 1px;
             background: var(--border);
             padding: 1px;
@@ -199,6 +199,27 @@
 
         .col-span-2 { grid-column: span 2; }
         .row-span-2 { grid-row: span 2; }
+        .price-layout { display: flex; gap: 24px; }
+        .price-histogram { flex: 1; min-width: 0; }
+        .price-summary { width: 180px; flex-shrink: 0; border-left: 1px dashed var(--border); padding-left: 16px; }
+        :focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
+        @media (max-width: 900px) {
+            html, body { height: auto; min-height: 100vh; }
+            main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+            .col-span-2, .row-span-2 { grid-column: auto; grid-row: auto; }
+            .panel { min-height: 180px; }
+            .panel-body { overflow-wrap: anywhere; }
+            nav { flex-wrap: wrap; gap: 12px; padding: 14px; }
+            nav > div { flex-wrap: wrap; }
+            #nav-clock { display: none; }
+            #log-feed { max-height: 360px; }
+            .price-layout { flex-direction: column; }
+            .price-summary { width: auto; border-left: 0; border-top: 1px dashed var(--border); padding: 16px 0 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+            .bar-fill { animation-delay: 0ms !important; }
+        }
     </style>
 </head>
 
@@ -207,7 +228,7 @@
     <nav>
         <div>
             <span class="glow-cyan nav-brand">▸ SCRAPESTORE_TERMINAL</span>
-            <span style="color:var(--dim); margin-left: 8px; font-size:10px;">v4.0</span>
+            <span style="color:var(--dim); margin-left: 8px; font-size:10px;">v2.0.0</span>
         </div>
         <div style="display:flex; align-items:center; gap:16px;">
             <span style="color:var(--dim); font-size:10px;" id="nav-clock">--:--:--</span>
@@ -239,15 +260,26 @@
             </div>
         </div>
 
+        <section class="panel col-span-2" aria-labelledby="freshness-heading" id="freshness">
+            <div class="panel-hdr"><span id="freshness-heading">// OBSERVATION_FRESHNESS</span></div>
+            <div class="panel-body" style="font-size:12px;line-height:1.8;">
+                <span class="glow">{{ freshness.recent }} within 7 days</span> ·
+                <span class="glow-amber">{{ freshness.stale }} over 7 days old</span> ·
+                {{ freshness.unknown }} time not recorded
+                {% if freshness.future %} · {{ freshness.future }} after report time{% endif %}
+                <p>Age at report generation (UTC). Stock is the last observed signal.<br>Unseen products are not marked unavailable.</p>
+            </div>
+        </section>
+
         <!-- 02: Price Analysis -->
         <div class="panel col-span-2">
             <div class="panel-hdr"><span><span class="id">02</span>// PRICE_ANALYSIS</span><span class="controls">[─ □ ×]</span></div>
-            <div class="panel-body" style="display:flex; gap:24px;">
-                <div style="flex:1;">
+            <div class="panel-body price-layout">
+                <div class="price-histogram">
                     <div class="glow-cyan" style="margin-bottom:12px; font-size:11px; letter-spacing:1px;">&gt;&gt; PRICE_DISTRIBUTION</div>
                     <div id="ascii-chart"></div>
                 </div>
-                <div style="width:180px; border-left:1px dashed var(--border); padding-left:16px;">
+                <div class="price-summary">
                     <div class="glow-amber" style="margin-bottom:10px; font-size:11px; letter-spacing:1px;">&gt;&gt; SUMMARY</div>
                     <div style="font-size:11px; line-height:1.8;">
                         <div style="color:var(--dim);">Min Price</div>
@@ -281,7 +313,7 @@
             <div class="panel-body" style="padding:0;">
                 <div style="padding:10px; height:100%; background:#010201;">
                     <div style="color:var(--dim); margin-bottom:8px; font-size:10px;">Report generated: {{ timestamp }}</div>
-                    <div><span class="glow">user@scrapestore</span>:<span class="glow-cyan">~</span>$ python analyze.py --mode=deep</div>
+                    <div><span class="glow">user@scrapestore</span>:<span class="glow-cyan">~</span>$ scrapingstore generate-report</div>
                     <div id="term-output" style="margin-top:6px;"></div>
                     <div style="margin-top:8px;"><span class="glow">user@scrapestore</span>:<span class="glow-cyan">~</span>$ <span class="blink" style="color:var(--green);">█</span></div>
                 </div>
@@ -292,9 +324,10 @@
     <script id="products-data" type="application/json">{{ products | tojson }}</script>
     <script id="statistics-data" type="application/json">{{ statistics | tojson }}</script>
     <script id="chart-data" type="application/json">{{ chart_data | tojson }}</script>
-    <script id="report-metadata" type="application/json">{{ {"scope": scope, "generated_at": generated_iso, "collection_label": collection_label, "latest_collection": last_run} | tojson }}</script>
+    <script id="report-metadata" type="application/json">{{ {"scope": scope, "generated_at": generated_iso, "collection_label": collection_label, "latest_collection": last_run, "freshness": freshness} | tojson }}</script>
     <script>
         const products = JSON.parse(document.getElementById('products-data').textContent);
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const total = products.length;
         const statistics = JSON.parse(document.getElementById('statistics-data').textContent);
         const chartData = JSON.parse(document.getElementById('chart-data').textContent);
@@ -380,7 +413,7 @@
                 div.className = 'log-line';
                 const time = p.scraped_at || 'Time not recorded';
                 const truncName = p.name.length > 22 ? p.name.substring(0, 22) + '…' : p.name;
-                div.innerHTML = `<span class="log-ts">[${escapeHtml(time)}]</span> ${escapeHtml(truncName)} <span class="log-ok">OBSERVED</span> <span class="log-price">(${p.price === null ? 'Price unavailable' : p.price.toFixed(2) + ' ' + escapeHtml(p.currency)})</span>`;
+                div.innerHTML = `<span class="log-ts">[${escapeHtml(time)}]</span> ${escapeHtml(truncName)} <span class="log-ok">${escapeHtml(p.freshness_label)}</span> <span class="log-price">(${p.price === null ? 'Price unavailable' : p.price.toFixed(2) + ' ' + escapeHtml(p.currency)})</span>`;
                 if (logFeed.firstChild) logFeed.insertBefore(div, logFeed.firstChild);
                 else logFeed.appendChild(div);
             }
@@ -388,7 +421,7 @@
             logIdx = end;
             if (logIdx < products.length) requestAnimationFrame(processLogBatch);
         }
-        setTimeout(() => requestAnimationFrame(processLogBatch), 2500);
+        setTimeout(() => requestAnimationFrame(processLogBatch), reducedMotion ? 0 : 2500);
 
         // Terminal output
         const termLines = [
@@ -404,7 +437,7 @@
                 div.style.cssText = 'color:#88aa88; font-size:11px; margin-bottom:2px;';
                 div.textContent = line.text;
                 termOut.appendChild(div);
-            }, line.delay);
+            }, reducedMotion ? 0 : line.delay);
         });
 
         // Boot sequence (Panel 03 replaced with status in summary panel)

@@ -9,9 +9,13 @@
 ![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas)
 ![Chart.js](https://img.shields.io/badge/Chart.js-Visualization-FF6384?logo=chartdotjs)
 
-A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration.
+A product observation pipeline with a searchable dashboard, immutable collection history, and evidence-aware change reports. Built with Python, Playwright, SQLModel and SQLite; exports CSV for Power BI.
+
+Version **2.0.0** adds saved-run comparisons and visible observation freshness. [Release and migration notes](RELEASE.md) explain the library API changes and legacy database upgrade.
 
 ### 🚀 **[Snapshot Demo](https://tzii.github.io/ScrapingStore/)** | **[Terminal View](https://tzii.github.io/ScrapingStore/dashboard_terminal.html)**
+
+The demo preserves 3,000 archived observations from December 2025. It demonstrates the interface, not current market prices or stock. Both themes display the age of that evidence.
 
 ## 📸 Dashboard Preview
 
@@ -118,7 +122,7 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install .
 
 # Install development tools instead
 pip install -r requirements-dev.txt
@@ -239,13 +243,24 @@ python main.py inspect-run RUN_ID
 # Include the original product values and parsing evidence as JSON
 python main.py inspect-run RUN_ID --products
 
+# Compare the accepted observations in two saved runs
+scrapingstore compare-runs OLD_RUN_ID NEW_RUN_ID > comparison.json
+
 # Regenerate both dashboard themes from that run's accepted observations
 python main.py generate-report --run-id RUN_ID
 ```
 
 The selected-run report uses the usual output paths and labels its scope and collection status. An empty saved run generates an empty report, even when the current catalog contains products. A partial run remains labelled partial. Report generation time is separate from each product's collection time. Without `--run-id`, reports continue to show the current stored catalog. Catalog reports and exports read product values and the latest-run metadata from one database snapshot, including during concurrent collections.
 
-History begins with collections saved by this version. Existing catalogs and manifest-only runs remain readable, but cannot be reconstructed as historical reports. The migration adds the history table without inventing past observations. History preserves accepted structured evidence; raw page archives, change comparisons, and a policy for marking stale or absent products remain future work. Missing a product in a run does not mark it unavailable.
+History begins with collections saved by this version. Existing catalogs and manifest-only runs remain readable, but cannot be reconstructed as historical reports. The migration adds the history table without inventing past observations. Raw page archives remain future work. Missing a product in a run does not mark it unavailable.
+
+`compare-runs OLD NEW` emits JSON in the supplied direction. Stable source IDs or detail URLs match observations; weak and legacy identities are counted as excluded. Name, availability and price evidence changes include their old and new values. Price deltas use the same known currency on both sides; unknown prices and currency changes have null deltas. A known zero remains zero, and a change from zero has no percentage. `only_in_old` and `only_in_new` mean one-sided observations, never product removal, introduction or stock transitions. Run manifests and warnings retain partial outcomes and differing scopes. Missing or manifest-only runs fail clearly; an empty archived run is valid.
+
+### Observation freshness
+
+Both themes count observations within seven days, over seven days old, and without a recorded time. Future timestamps are flagged separately. Ages are calculated in UTC **at report generation**, including when replaying a historical run; they do not keep ticking in the saved HTML. The modern catalog shows each observation time and freshness label, and its CSV includes `freshness` and `observed_age_days`. These indicators never change the last observed availability. Regenerate the report to update its age assessment.
+
+To refresh the archived showcase with the current templates while preserving its collection times, run `python -m scripts.refresh_demo` from the repository root. To replace it with a newly collected catalog, use `scrapingstore generate-report --docs` after a successful collection.
 
 The browser collector enforces a wall-clock collection deadline. Static Requests timeouts bound socket inactivity: a slowly streaming response may return after the configured run deadline. Its evidence is retained and the run is marked incomplete rather than reported as successful completion.
 

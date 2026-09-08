@@ -3,6 +3,7 @@
 import csv
 import io
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -79,6 +80,37 @@ def download_rows(page):
         page.get_by_role("button", name="Export all matching products as CSV").click()
     text = Path(download.value.path()).read_text(encoding="utf-8-sig")
     return list(csv.DictReader(io.StringIO(text)))
+
+
+def test_freshness_is_visible_and_exported_without_overriding_stock(
+    report_page, tmp_path
+):
+    product = Product(
+        name="Older observation",
+        price=0,
+        availability="In Stock",
+        source_url="https://example.test",
+        scraped_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+    )
+    page = report_page
+    page.goto(render_pair(tmp_path, [product]))
+    expect(page.locator("#freshness")).to_contain_text("1 over 7 days old")
+    expect(page.locator("#grid-table tbody")).to_contain_text(
+        "Observed over 7 days ago"
+    )
+    expect(page.locator("#grid-table tbody")).to_contain_text("In Stock")
+    row = download_rows(page)[0]
+    assert row["freshness"] == "stale" and row["availability"] == "In Stock"
+    assert row["price"] == "0"
+    page.get_by_role("link", name="Terminal", exact=False).click()
+    expect(page.locator("#freshness")).to_contain_text("1 over 7 days old")
+    page.set_viewport_size({"width": 390, "height": 844})
+    summary = page.locator(".price-summary")
+    summary.scroll_into_view_if_needed()
+    bounds = summary.bounding_box()
+    assert bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390
+    assert page.evaluate("document.documentElement.scrollWidth") == 390
+    expect(page.locator("#log-feed")).to_contain_text("Observed over 7 days ago")
 
 
 def test_search_filters_pagination_and_export_agree(report_page, tmp_path):

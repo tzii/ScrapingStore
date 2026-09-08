@@ -47,3 +47,39 @@ jobs:
 
     - name: Test with pytest
       run: pytest --run-browser --cov --cov-report=term-missing
+
+  wheel-install:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.9', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build distribution
+        run: |
+          python -m pip install build
+          python -m build
+      - name: Install wheel in an isolated environment and exercise public commands
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-env"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            BIN="$RUNNER_TEMP/wheel-env/Scripts"
+          else
+            BIN="$RUNNER_TEMP/wheel-env/bin"
+          fi
+          "$BIN/python" -m pip install dist/*.whl
+          "$BIN/python" -m pip check
+          mkdir "$RUNNER_TEMP/wheel-work"
+          cp scripts/wheel_smoke.py "$RUNNER_TEMP/wheel-work/smoke.py"
+          cd "$RUNNER_TEMP/wheel-work"
+          PATH="$BIN:$PATH" "$BIN/python" -I smoke.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions-${{ matrix.os }}-${{ matrix.python }}
+          path: dist/*

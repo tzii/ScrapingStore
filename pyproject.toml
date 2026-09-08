@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "scrapingstore"
-version = "1.2.0"
+version = "2.0.0"
 description = "A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration."
 authors = [
     {name = "Simone"},
@@ -45,7 +45,7 @@ include = ["scraper*", "cleaning*", "visualization*"]
 exclude = ["data*", "assets*", "tests*", "docs*"]
 
 [tool.setuptools]
-py-modules = ["models", "database", "config", "logger", "main"]
+py-modules = ["models", "database", "config", "logger", "main", "comparison"]
 
 [tool.setuptools.package-data]
 visualization = ["templates/*.html"]
@@ -78,4 +78,5 @@ source = [
     "logger",
     "main",
     "models",
+    "comparison",
 ]

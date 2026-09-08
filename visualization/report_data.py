@@ -3,7 +3,7 @@ from collections import Counter
 from dataclasses import dataclass
 from math import ceil, floor
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -93,6 +93,9 @@ def _normalize_products_df(df: pd.DataFrame) -> pd.DataFrame:
     normalized["price"] = normalized["price"].where(normalized["price"] >= 0)
     normalized["availability"] = (
         normalized["availability"].fillna("Unknown").astype(str)
+    )
+    normalized["scraped_at"] = pd.to_datetime(
+        normalized["scraped_at"], utc=True, errors="coerce", format="mixed"
     )
     return normalized
 
@@ -188,7 +191,32 @@ def _price_histogram(prices: pd.Series) -> Dict[str, List[Any]]:
     return {"labels": labels, "counts": counts}
 
 
-def _build_context(df: pd.DataFrame) -> Dict[str, Any]:
+def _freshness(
+    products: List[Dict[str, Any]], generated_at: datetime
+) -> Dict[str, Any]:
+    """Describe observation age at report generation; never change stock evidence."""
+    counts = {"recent": 0, "stale": 0, "unknown": 0, "future": 0}
+    for product in products:
+        observed = pd.to_datetime(product["scraped_at"], utc=True, errors="coerce")
+        age = None if pd.isna(observed) else (generated_at - observed).total_seconds()
+        if age is None:
+            status, label = "unknown", "Time not recorded"
+        elif age < 0:
+            status, label = "future", "Observation after report time"
+        elif age <= 7 * 86400:
+            status, label = "recent", "Observed within 7 days"
+        else:
+            status, label = "stale", "Observed over 7 days ago"
+        product["freshness"] = status
+        product["freshness_label"] = label
+        product["observed_age_days"] = None if age is None else round(age / 86400, 3)
+        counts[status] += 1
+    return {"threshold_days": 7, "as_of": generated_at.isoformat(), **counts}
+
+
+def _build_context(
+    df: pd.DataFrame, generated_at: Optional[datetime] = None
+) -> Dict[str, Any]:
     """Build the complete template context from normalized product data."""
     total_products = len(df)
     prices = df.loc[df["currency"].eq("EUR"), "price"].dropna()
@@ -197,13 +225,21 @@ def _build_context(df: pd.DataFrame) -> Dict[str, Any]:
     min_price = float(prices.min()) if price_count else None
     max_price = float(prices.max()) if price_count else None
     availability, availability_pct, availability_label = _availability_stats(df)
-    generated_at = datetime.now().astimezone()
+    generated_at = generated_at or datetime.now(timezone.utc)
+    generated_at = (
+        generated_at.replace(tzinfo=timezone.utc)
+        if generated_at.tzinfo is None
+        else generated_at.astimezone(timezone.utc)
+    )
+    products = _json_records(df[list(_PRODUCT_COLUMNS)])
+    freshness = _freshness(products, generated_at)
 
     return {
         "timestamp": generated_at.strftime("%b %d, %Y • %H:%M"),
         "generated_iso": generated_at.isoformat(timespec="seconds"),
         "scope": "Current stored catalog",
-        "products": _json_records(df[list(_PRODUCT_COLUMNS)]),
+        "products": products,
+        "freshness": freshness,
         "franchises": _detect_franchises(df),
         "top_products": _top_products(df),
         "kpi": {
@@ -246,9 +282,10 @@ class ReportSnapshot:
         *,
         scope: str = "Current stored catalog",
         collection_label: str = "Latest collection",
+        generated_at: Optional[datetime] = None,
     ) -> "ReportSnapshot":
         frame = pd.DataFrame([product.model_dump() for product in products])
-        context = _build_context(_normalize_products_df(frame))
+        context = _build_context(_normalize_products_df(frame), generated_at)
         context["last_run"] = run
         context["scope"] = scope
         context["collection_label"] = collection_label
