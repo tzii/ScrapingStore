@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.1] - 2026-09-08
+
+- Show the original UTC collection date or date range prominently; keep report-generation time secondary and replace empty collection disclosures with a concise explanation.
+- Replace the arbitrary premium-price KPI with median EUR price, and describe availability as last observed stock evidence without inventory-health claims.
+- Separate high-price outliers from the main histogram, retain empty equal-width bins, and keep every known price in statistics and exports.
+- Reserve space for chart tick labels and refresh both published themes and README previews.
+
 ## [2.0.0] - 2026-09-08
 
 ### Breaking changes

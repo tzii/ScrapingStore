@@ -138,7 +138,7 @@ def _json_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
 
 
 def _availability_stats(df: pd.DataFrame) -> Tuple[Dict[str, int], str, str]:
-    """Calculate availability counts, percentage, and health label."""
+    """Describe observed stock signals without assessing inventory health."""
     total = len(df)
     statuses = df["availability"].str.strip().str.casefold()
     in_stock = int((statuses == "in stock").sum())
@@ -153,28 +153,41 @@ def _availability_stats(df: pd.DataFrame) -> Tuple[Dict[str, int], str, str]:
         )
 
     percentage = (in_stock / total) * 100
-    if percentage > 80:
-        label = "Stock Level Healthy"
-    elif percentage > 50:
-        label = "Stock Level Moderate"
-    else:
-        label = "Stock Level Low"
 
     counts = {
         "in_stock": in_stock,
         "out_of_stock": out_of_stock,
         "unknown": unknown,
     }
-    return counts, f"{int(percentage)}%", label
+    return counts, f"{int(percentage)}%", "Last observed in stock"
 
 
-def _price_histogram(prices: pd.Series) -> Dict[str, List[Any]]:
-    """Count each price once; the final bin includes its upper boundary."""
+def _price_histogram(prices: pd.Series) -> Dict[str, Any]:
+    """Keep equal-width bins, separating high outliers with an explicit count.
+
+    For at least eight prices, values above Q3 + 1.5 * IQR are shown separately.
+    Summary statistics still use every usable price. Empty bins stay visible.
+    """
+    threshold = None
+    outliers = prices.iloc[:0]
+    if len(prices) >= 8:
+        q1, q3 = prices.quantile([0.25, 0.75])
+        threshold = float(q3 + 1.5 * (q3 - q1))
+        outliers = prices[prices > threshold]
+    main_prices = prices.drop(outliers.index)
+    result: Dict[str, Any] = {
+        "labels": ["No Data"],
+        "counts": [0],
+        "main_count": len(main_prices),
+        "outlier_count": len(outliers),
+        "outlier_threshold": threshold,
+        "total": len(prices),
+    }
     if prices.empty:
-        return {"labels": ["No Data"], "counts": [0]}
+        return result
 
-    min_price = floor(prices.min())
-    max_price = float(prices.max())
+    min_price = floor(main_prices.min())
+    max_price = float(main_prices.max())
     bin_count = 8
     step = max(5, ceil((max_price - min_price) / bin_count))
 
@@ -183,12 +196,35 @@ def _price_histogram(prices: pd.Series) -> Dict[str, List[Any]]:
     for index in range(bin_count):
         start = min_price + index * step
         end = start + step
-        upper = prices <= end if index == bin_count - 1 else prices < end
-        count = int(((prices >= start) & upper).sum())
-        if count:
-            labels.append(f"{start}-{end}")
-            counts.append(count)
-    return {"labels": labels, "counts": counts}
+        upper = main_prices <= end if index == bin_count - 1 else main_prices < end
+        count = int(((main_prices >= start) & upper).sum())
+        labels.append(f"{start}-{end}")
+        counts.append(count)
+    result.update(labels=labels, counts=counts)
+    return result
+
+
+def _observation_period(df: pd.DataFrame) -> Dict[str, Any]:
+    dates = df["scraped_at"].dropna()
+    if dates.empty:
+        return {
+            "label": (
+                "Collection dates unavailable" if len(df) else "No observations yet"
+            ),
+            "start": None,
+            "end": None,
+            "missing": len(df),
+        }
+    first, last = dates.min(), dates.max()
+    label = first.strftime("%d %B %Y")
+    if first.date() != last.date():
+        label += " – " + last.strftime("%d %B %Y")
+    return {
+        "label": "Data collected " + label,
+        "start": first.isoformat(),
+        "end": last.isoformat(),
+        "missing": len(df) - len(dates),
+    }
 
 
 def _freshness(
@@ -233,6 +269,12 @@ def _build_context(
     )
     products = _json_records(df[list(_PRODUCT_COLUMNS)])
     freshness = _freshness(products, generated_at)
+    chart = _price_histogram(prices)
+    high_prices = df.iloc[:0]
+    if chart["outlier_count"]:
+        high_prices = df[
+            df["currency"].eq("EUR") & (df["price"] > chart["outlier_threshold"])
+        ]
 
     return {
         "timestamp": generated_at.strftime("%b %d, %Y • %H:%M"),
@@ -240,6 +282,8 @@ def _build_context(
         "scope": "Current stored catalog",
         "products": products,
         "freshness": freshness,
+        "observation_period": _observation_period(df),
+        "price_outliers": _top_products(high_prices, n=5),
         "franchises": _detect_franchises(df),
         "top_products": _top_products(df),
         "kpi": {
@@ -247,13 +291,13 @@ def _build_context(
             "avg": f"{average_price:.2f}" if average_price is not None else "—",
             "known_prices": price_count,
             "missing_prices": int(df["price"].isna().sum()),
-            "premium": int((prices > 85).sum()),
+            "median": f"{prices.median():.2f}" if price_count else "—",
             "avail_pct": availability_pct,
         },
         "kpi_min": f"{min_price:.2f}" if min_price is not None else "—",
         "kpi_max": f"{max_price:.2f}" if max_price is not None else "—",
         "kpi_availability_label": availability_label,
-        "chart_data": _price_histogram(prices),
+        "chart_data": chart,
         "availability": availability,
         "statistics": {
             "total": total_products,

@@ -200,20 +200,23 @@
         <section id="overview" class="pt-10 pb-8 anim-in">
             <p class="text-[11px] font-mono uppercase tracking-[0.25em] text-accent mb-3">Product Intelligence</p>
             <h2 class="text-3xl lg:text-5xl font-black tracking-tight font-display leading-tight">Market snapshot,<br class="hidden lg:block"> beautifully decoded.</h2>
-            <p class="mt-3 text-sm max-w-xl" style="color:var(--text-secondary);">{{ kpi.total }} products in this report. Report generated <time datetime="{{ generated_iso }}">{{ timestamp }}</time>.</p>
+            <p id="observation-period" class="mt-4 text-base font-medium">{{ observation_period.label | e }}{% if observation_period.start %} <span class="text-xs" style="color:var(--text-secondary);">(UTC)</span>{% endif %}</p>
+            <p class="mt-2 text-sm" style="color:var(--text-secondary);">{{ kpi.total }} products in this report.{% if observation_period.missing %} {{ observation_period.missing }} without a recorded collection date.{% endif %}</p>
         </section>
 
         <p class="text-xs mb-4" style="color:var(--text-secondary);">Scope: {{ scope | e }}. Summaries, charts and insights describe the full report dataset; search and filters affect the table and CSV export.</p>
 
+        {% if last_run %}
         <details class="panel mb-6" id="collection-outcome">
-            <summary>{{ collection_label | e }}: {{ last_run.status | e if last_run else 'Not recorded' }}</summary>
-            {% if last_run %}
+            <summary>{{ collection_label | e }}: {{ last_run.status | e }}</summary>
             <p>Scope: {{ last_run.scope.description | e }}. Finished: {{ last_run.finished_at | e }}.</p>
             <p>{{ last_run.pages_succeeded }} pages succeeded, {{ last_run.pages_failed }} failed, {{ last_run.pages_partial }} partial; {{ last_run.pages_outside_scope | default(0) }} probes beyond the confirmed end. Stop: {{ last_run.stop_reason | e }}.</p>
             <p>Catalog rows may come from earlier collections. Missing products are not marked unavailable.</p>
             <pre class="overflow-auto text-xs">{{ last_run | tojson(indent=2) | e }}</pre>
-            {% endif %}
         </details>
+        {% elif kpi.total %}
+        <p id="collection-outcome" class="text-xs mb-6" style="color:var(--text-secondary);">Collection outcome was not captured for this dataset.</p>
+        {% endif %}
         <!-- KPI cards -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div class="kpi-card gold anim-in anim-d1">
@@ -227,14 +230,14 @@
                 <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">{{ kpi.known_prices }} usable EUR prices; {{ kpi.missing_prices }} missing. Range {{ kpi_min }} – {{ kpi_max }} EUR</p>
             </div>
             <div class="kpi-card rose anim-in anim-d3">
-                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Premium Items</p>
-                <p class="text-4xl lg:text-5xl font-bold tracking-tight font-display" id="kpi-premium">0</p>
-                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">Products &gt; &euro;85</p>
+                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Median EUR Price</p>
+                <p class="text-4xl lg:text-5xl font-bold tracking-tight font-display"><span class="text-2xl">&euro;</span><span id="kpi-median">0</span></p>
+                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">Middle price of the observed catalog</p>
             </div>
             <div class="kpi-card slate anim-in anim-d4">
-                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Availability</p>
+                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Last observed in stock</p>
                 <p class="text-4xl lg:text-5xl font-bold tracking-tight font-display" id="kpi-avail">0%</p>
-                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">{{ kpi_availability_label }}</p>
+                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">{{ '{:,}'.format(availability.in_stock) }} of {{ '{:,}'.format(kpi.total) }} products</p>
             </div>
         </div>
 
@@ -245,7 +248,17 @@
                     <h3 class="text-sm font-semibold tracking-tight">Price Distribution</h3>
                     <span class="text-[10px] font-mono uppercase tracking-wider" style="color:var(--text-secondary);">Histogram</span>
                 </div>
-                <div class="h-[300px]"><canvas id="priceChart" role="img" aria-label="Price distribution histogram"></canvas></div>
+                <p id="price-distribution-summary" class="text-xs mb-3" style="color:var(--text-secondary);">{{ chart_data.main_count }} of {{ chart_data.total }} known EUR prices in the main range. Equal-width bands; empty bands are retained.</p>
+                <div class="h-[300px] min-w-0"><canvas id="priceChart" role="img" aria-label="Price distribution histogram" aria-describedby="price-distribution-summary"></canvas></div>
+                {% if chart_data.outlier_count %}
+                <div id="price-outliers" class="mt-4 pt-4 border-t" style="border-color:var(--border);">
+                    <p class="text-xs font-semibold">{{ chart_data.outlier_count }} high-price outlier{{ 's' if chart_data.outlier_count != 1 else '' }}, shown separately</p>
+                    <ul class="mt-2 space-y-1 text-xs" style="color:var(--text-secondary);">
+                        {% for product in price_outliers %}<li class="flex justify-between gap-4"><span>{{ product.name | e }}</span><span class="whitespace-nowrap font-mono">&euro;{{ '%.2f' | format(product.price) }}</span></li>{% endfor %}
+                    </ul>
+                    <p class="text-xs mt-2" style="color:var(--text-secondary);">{% if chart_data.outlier_count > 5 %}Highest 5 shown. {% endif %}Above &euro;{{ '%.2f' | format(chart_data.outlier_threshold) }} (upper quartile + 1.5 &times; interquartile range). Included in all headline statistics and the catalog.</p>
+                </div>
+                {% endif %}
             </div>
             <div class="col-span-12 lg:col-span-4 panel anim-in anim-d6">
                 <div class="flex items-center justify-between mb-6">
@@ -353,7 +366,7 @@
     <script id="availability-data" type="application/json">{{ availability | tojson }}</script>
     <script id="kpi-data" type="application/json">{{ kpi | tojson }}</script>
     <script id="statistics-data" type="application/json">{{ statistics | tojson }}</script>
-    <script id="report-metadata" type="application/json">{{ {"scope": scope, "generated_at": generated_iso, "collection_label": collection_label, "latest_collection": last_run, "freshness": freshness} | tojson }}</script>
+    <script id="report-metadata" type="application/json">{{ {"scope": scope, "generated_at": generated_iso, "collection_label": collection_label, "latest_collection": last_run, "freshness": freshness, "observation_period": observation_period} | tojson }}</script>
     <script id="chart-data" type="application/json">{{ chart_data | tojson }}</script>
 
     <script>
@@ -403,6 +416,8 @@
         }
 
         function dashboard() {
+            // Chart.js instances must stay outside Alpine's reactive proxies.
+            const charts = {};
             return {
                 showSplash: true,
                 franchises: franchiseData,
@@ -412,14 +427,13 @@
                 query: { search: '', availability: '', min: null, max: null },
                 filteredData: productsData.slice(),
                 grid: null,
-                charts: {},
                 init() {
                     setTimeout(() => {
                         this.showSplash = false;
                         setTimeout(() => {
                             animateCount(document.getElementById('kpi-total'), kpiData.total, '', 1200);
                             animateCount(document.getElementById('kpi-avg'), kpiData.avg, '', 1200);
-                            animateCount(document.getElementById('kpi-premium'), kpiData.premium, '', 1200);
+                            animateCount(document.getElementById('kpi-median'), kpiData.median, '', 1200);
                             animateCount(document.getElementById('kpi-avail'), parseInt(kpiData.avail_pct) || 0, '%', 1200);
                         }, 150);
                     }, reducedMotion ? 0 : 900);
@@ -477,8 +491,8 @@
                 updateCharts(e) {
                     const isDark = e.detail.isDark;
                     const gridColor = isDark ? '#222228' : '#e8e4de';
-                    const textColor = isDark ? '#6e6e7a' : '#8a8580';
-                    Object.values(this.charts).forEach(chart => {
+                    const textColor = isDark ? '#a0a0ad' : '#706b66';
+                    Object.values(charts).forEach(chart => {
                         if (chart.options.scales && chart.options.scales.x) {
                             chart.options.scales.x.ticks.color = textColor;
                             chart.options.scales.y.ticks.color = textColor;
@@ -494,9 +508,9 @@
                     window.addEventListener('theme-changed', (e) => this.updateCharts(e));
                     const isDark = Alpine.store('theme') ? Alpine.store('theme').isDark : getTheme();
                     const gridColor = isDark ? '#222228' : '#e8e4de';
-                    const textColor = isDark ? '#6e6e7a' : '#8a8580';
+                    const textColor = isDark ? '#a0a0ad' : '#706b66';
 
-                    this.charts.price = new Chart(document.getElementById('priceChart').getContext('2d'), {
+                    charts.price = new Chart(document.getElementById('priceChart').getContext('2d'), {
                         type: 'bar',
                         data: {
                             labels: chartData.labels,
@@ -511,16 +525,17 @@
                         },
                         options: {
                             responsive: true, maintainAspectRatio: false,
+                            layout: { padding: { left: 8, right: 12 } },
                             animation: reducedMotion ? false : { delay: (ctx) => ctx.dataIndex * 80 + 600 },
                             plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1a1a1f', titleColor: '#ececf0', bodyColor: '#ececf0', borderColor: '#222228', borderWidth: 1, cornerRadius: 8, padding: 12, bodyFont: { family: 'Satoshi' }, titleFont: { family: 'Satoshi', weight: '600' } } },
                             scales: {
-                                y: { grid: { color: gridColor, drawBorder: false }, ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 10 } }, border: { display: false } },
+                                y: { beginAtZero: true, afterFit: axis => { axis.width = Math.max(axis.width, 60); }, grid: { color: gridColor, drawBorder: false }, ticks: { precision: 0, padding: 8, color: textColor, font: { family: 'JetBrains Mono', size: 10 } }, border: { display: false } },
                                 x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 10 } }, border: { display: false } }
                             }
                         }
                     });
 
-                    this.charts.avail = new Chart(document.getElementById('availChart').getContext('2d'), {
+                    charts.avail = new Chart(document.getElementById('availChart').getContext('2d'), {
                         type: 'doughnut',
                         data: {
                             labels: ['In Stock', 'Out of Stock', 'Unknown'],
