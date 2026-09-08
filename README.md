@@ -11,7 +11,7 @@
 
 A product observation pipeline with a searchable dashboard, immutable collection history, and evidence-aware change reports. Built with Python, Playwright, SQLModel and SQLite; exports CSV for Power BI.
 
-Version **2.0.0** adds saved-run comparisons and visible observation freshness. [Release and migration notes](RELEASE.md) explain the library API changes and legacy database upgrade.
+Version **2.0.1** adds saved-run comparisons and visible observation freshness. [Release and migration notes](RELEASE.md) explain the library API changes and legacy database upgrade.
 
 ### 🚀 **[Snapshot Demo](https://tzii.github.io/ScrapingStore/)** | **[Terminal View](https://tzii.github.io/ScrapingStore/dashboard_terminal.html)**
 
@@ -189,7 +189,7 @@ Both reports describe the **current stored catalog**, selected once after persis
 
 In the modern report, search (product name, formatted price or availability), availability and inclusive price bounds form one catalog query. The table and CSV export use that query. Export includes **all matching rows across all pages**. Reset clears the whole query. Summaries, charts and insights always describe the full stored catalog and are labelled accordingly.
 
-Both themes share price statistics and histogram bins. Zero prices are included, an even median averages the two middle values, and the last histogram bin includes its upper boundary. Only usable EUR prices contribute to price summaries. Unknown prices remain blank in CSV and appear as “Price unavailable” in the catalog. With a price bound selected, records without a usable EUR price are excluded; without bounds they remain searchable and exportable.
+Both themes share price statistics and histogram bins. For datasets with at least eight known EUR prices, values above the upper quartile plus 1.5 times the interquartile range are shown separately as high-price outliers. The main histogram retains empty equal-width bands; outliers stay in headline statistics, search and exports. The highest five outliers are listed alongside their total count. Zero prices are included, an even median averages the two middle values, and the last histogram bin includes its upper boundary. Only usable EUR prices contribute to price summaries. Unknown prices remain blank in CSV and appear as “Price unavailable” in the catalog. With a price bound selected, records without a usable EUR price are excluded; without bounds they remain searchable and exportable.
 
 Navigation links follow the generated output paths: local `data/dashboard.html`, GitHub Pages `docs/index.html`, or configured output directories. Programmatic callers with custom filenames can pass `terminal_path` to `generate_dashboard` and `dashboard_path` to `generate_terminal_dashboard`.
 

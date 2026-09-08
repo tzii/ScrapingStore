@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SCRAPESTORE // TERMINAL v2.0.0</title>
+    <title>SCRAPESTORE // TERMINAL v2.0.1</title>
     <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -228,7 +228,7 @@
     <nav>
         <div>
             <span class="glow-cyan nav-brand">▸ SCRAPESTORE_TERMINAL</span>
-            <span style="color:var(--dim); margin-left: 8px; font-size:10px;">v2.0.0</span>
+            <span style="color:var(--dim); margin-left: 8px; font-size:10px;">v2.0.1</span>
         </div>
         <div style="display:flex; align-items:center; gap:16px;">
             <span style="color:var(--dim); font-size:10px;" id="nav-clock">--:--:--</span>
@@ -245,7 +245,7 @@
                 <div class="kpi">
                     <div class="kpi-label">TOTAL_ITEMS</div>
                     <div class="kpi-val glow" id="t-count">0</div>
-                    <div class="kpi-sub" style="color:var(--green);">{{ scope | e }}<br>{{ collection_label | e }}: {{ last_run.status | e if last_run else 'Not recorded' }}</div>
+                    <div class="kpi-sub" style="color:var(--green);"><span id="observation-period">{{ observation_period.label | e }} (UTC)</span><br>{{ scope | e }}{% if last_run %}<br>{{ collection_label | e }}: {{ last_run.status | e }}{% endif %}</div>
                 </div>
                 <div class="kpi">
                     <div class="kpi-label">AVG_KNOWN_EUR_PRICE</div>
@@ -253,7 +253,7 @@
                     <div class="kpi-sub" style="color:var(--dim);">{{ kpi.known_prices }} usable EUR prices / {{ kpi.missing_prices }} missing</div>
                 </div>
                 <div class="kpi">
-                    <div class="kpi-label">STOCK_RATIO</div>
+                    <div class="kpi-label">LAST_OBSERVED_IN_STOCK</div>
                     <div class="kpi-val glow" id="t-stock">0%</div>
                     <div class="kpi-sub" id="t-stock-label" style="color:var(--amber);">CHECKING</div>
                 </div>
@@ -277,7 +277,15 @@
             <div class="panel-body price-layout">
                 <div class="price-histogram">
                     <div class="glow-cyan" style="margin-bottom:12px; font-size:11px; letter-spacing:1px;">&gt;&gt; PRICE_DISTRIBUTION</div>
+                    <p style="margin-bottom:12px;">{{ chart_data.main_count }} / {{ chart_data.total }} known EUR prices in the main range.</p>
                     <div id="ascii-chart"></div>
+                    {% if chart_data.outlier_count %}
+                    <div id="price-outliers" style="margin-top:16px;line-height:1.8;">
+                        <p class="glow-amber">{{ chart_data.outlier_count }} high-price outlier{{ 's' if chart_data.outlier_count != 1 else '' }}, shown separately</p>
+                        {% for product in price_outliers %}<p>{{ product.name | e }} · &euro;{{ '%.2f' | format(product.price) }}</p>{% endfor %}
+                        <p>{% if chart_data.outlier_count > 5 %}Highest 5 shown. {% endif %}Above &euro;{{ '%.2f' | format(chart_data.outlier_threshold) }} (Q3 + 1.5 × IQR). Included in summary statistics and the catalog.</p>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="price-summary">
                     <div class="glow-amber" style="margin-bottom:10px; font-size:11px; letter-spacing:1px;">&gt;&gt; SUMMARY</div>
@@ -324,7 +332,7 @@
     <script id="products-data" type="application/json">{{ products | tojson }}</script>
     <script id="statistics-data" type="application/json">{{ statistics | tojson }}</script>
     <script id="chart-data" type="application/json">{{ chart_data | tojson }}</script>
-    <script id="report-metadata" type="application/json">{{ {"scope": scope, "generated_at": generated_iso, "collection_label": collection_label, "latest_collection": last_run, "freshness": freshness} | tojson }}</script>
+    <script id="report-metadata" type="application/json">{{ {"scope": scope, "generated_at": generated_iso, "collection_label": collection_label, "latest_collection": last_run, "freshness": freshness, "observation_period": observation_period} | tojson }}</script>
     <script>
         const products = JSON.parse(document.getElementById('products-data').textContent);
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -353,7 +361,7 @@
         document.getElementById('t-count').textContent = total;
         document.getElementById('t-price').textContent = avg === null ? '—' : avg.toFixed(2);
         document.getElementById('t-stock').textContent = stockPct + '%';
-        document.getElementById('t-stock-label').textContent = 'SHARE LISTED IN STOCK';
+        document.getElementById('t-stock-label').textContent = 'LAST OBSERVED IN STOCK';
         document.getElementById('stat-min').textContent = minP === null ? '—' : '€' + minP.toFixed(2);
         document.getElementById('stat-max').textContent = maxP === null ? '—' : '€' + maxP.toFixed(2);
         document.getElementById('stat-med').textContent = median === null ? '—' : '€' + median.toFixed(2);
@@ -368,7 +376,7 @@
             const row = document.createElement('div');
             row.className = 'bar-row';
             const pct = (bin.count / maxBin) * 100;
-            const blocks = Math.max(1, Math.round(pct / 3));
+            const blocks = bin.count ? Math.max(1, Math.round(pct / 3)) : 0;
             const bar = '█'.repeat(blocks);
             row.innerHTML = `<div class="bar-label">${bin.label}€</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%; animation: barReveal 0.6s ease-out ${2.2 + idx * 0.12}s forwards;">${bar}</div></div><div class="bar-count">${bin.count}</div>`;
             chartDiv.appendChild(row);
@@ -428,7 +436,7 @@
             { text: '▸ Loading dataset... done (' + total + ' records)', delay: 2200 },
             { text: '▸ Computing statistics... done', delay: 2600 },
             { text: '▸ Rendering visualization... done', delay: 3000 },
-            { text: '▸ ' + {{ collection_label | tojson }} + ': ' + {{ (last_run.status if last_run else 'Not recorded') | tojson }}, delay: 3400 },
+            { text: '▸ ' + {{ collection_label | tojson }} + ': ' + {{ (last_run.status if last_run else 'Outcome not captured') | tojson }}, delay: 3400 },
         ];
         const termOut = document.getElementById('term-output');
         termLines.forEach(line => {

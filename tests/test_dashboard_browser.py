@@ -161,8 +161,9 @@ def test_search_filters_pagination_and_export_agree(report_page, tmp_path):
         page.evaluate(
             "Chart.getChart('priceChart').data.datasets[0].data.reduce((a,b) => a+b, 0)"
         )
-        == 19
+        == 18
     )
+    expect(page.locator("#price-outliers")).to_contain_text("1 high-price outlier")
     page.get_by_label("Search catalog").fill("Match 00")
     expect(page.locator("#grid-table tbody tr")).to_have_count(1)
     assert [row["name"] for row in download_rows(page)] == ["Match 00"]
@@ -173,6 +174,55 @@ def test_search_filters_pagination_and_export_agree(report_page, tmp_path):
     expect(page.locator("#catalog-match-count")).to_have_text("19 matching products")
     expect(page.get_by_label("Search catalog")).to_have_value("")
     assert len(download_rows(page)) == 19
+
+
+def test_dates_median_and_outliers_are_visible_without_empty_disclosure(
+    report_page, tmp_path
+):
+    products = [
+        Product(
+            name=f"Price {price}",
+            price=price,
+            availability="In Stock",
+            source_url="https://example.test",
+            scraped_at=datetime(2025, 12, 11, tzinfo=timezone.utc),
+        )
+        for price in [50, 55, 60, 65, 70, 75, 80, 85] * 3 + [500, 800]
+    ]
+    page = report_page
+    page.goto(render_pair(tmp_path, products))
+    expect(page.locator("#observation-period")).to_contain_text(
+        "Data collected 11 December 2025"
+    )
+    expect(page.locator("details#collection-outcome")).to_have_count(0)
+    expect(page.locator("#kpi-median")).to_have_text("70.00")
+    expect(page.locator("#price-outliers")).to_contain_text("2 high-price outliers")
+    assert (
+        page.evaluate(
+            "Chart.getChart('priceChart').data.datasets[0].data.reduce((a,b) => a+b, 0)"
+        )
+        == 24
+    )
+    assert page.evaluate("Chart.getChart('priceChart').scales.y.width") >= 60
+    for _ in range(2):
+        page.get_by_role("button", name="Toggle color theme").click()
+        expected_color = page.evaluate(
+            "Alpine.store('theme').isDark ? '#a0a0ad' : '#706b66'"
+        )
+        assert (
+            page.evaluate("Chart.getChart('priceChart').options.scales.y.ticks.color")
+            == expected_color
+        )
+        assert (
+            page.evaluate(
+                "Chart.getChart('availChart').options.plugins.legend.labels.color"
+            )
+            == expected_color
+        )
+    assert len(download_rows(page)) == 26
+    page.get_by_role("link", name="Terminal", exact=False).click()
+    expect(page.locator("#price-outliers")).to_contain_text("2 high-price outliers")
+    expect(page.locator("#stat-max")).to_have_text("€800.00")
 
 
 @pytest.mark.parametrize("modern_name", ["dashboard.html", "index.html", "custom.html"])
