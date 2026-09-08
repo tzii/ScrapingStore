@@ -1,196 +1,230 @@
-"""
-Browser Product Scraper
-=======================
-Uses Playwright for dynamic scraping with true concurrency.
-"""
+"""Playwright acquisition with bounded concurrency and explicit run outcomes."""
 
 import asyncio
-import re
-from typing import Any, List, Optional
+import time
+from typing import Optional
+
 from playwright.async_api import (
     async_playwright,
     BrowserContext,
+    Page,
+    Error as PlaywrightError,
     TimeoutError as PlaywrightTimeoutError,
 )
 
-from scraper.base import BaseScraper
-from models import Product
-from logger import get_logger
 from config import DEFAULT_TIMEOUT, USER_AGENT_FALLBACK
-
-logger = get_logger(__name__)
+from scraper.base import BaseScraper, TRANSIENT_STATUSES, retry_delay
+from scraper.parsing import EMPTY_TEXT, READY_SELECTOR, parse_page
+from scraper.results import PageResult, ScrapeRunResult
 
 
 class BrowserScraper(BaseScraper):
-    def scrape(self, max_pages: Optional[int] = None) -> List[Product]:
-        """
-        Entry point that runs the async event loop.
-        """
+    def scrape(self, max_pages: Optional[int] = None) -> ScrapeRunResult:
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
-            loop = None
+            return asyncio.run(self.scrape_async(max_pages))
+        raise RuntimeError(
+            "Use await scraper.scrape_async() inside an active event loop"
+        )
 
-        if loop and loop.is_running():
-            import concurrent.futures
+    async def scrape_async(self, max_pages: Optional[int] = None) -> ScrapeRunResult:
+        run = self.new_run(max_pages, "browser")
+        deadline = time.monotonic() + self.run_timeout
+        browser = None
+        context = None
+        try:
+            async with async_playwright() as playwright:
+                try:
+                    browser = await playwright.chromium.launch(
+                        headless=True,
+                        timeout=max(
+                            1, min(DEFAULT_TIMEOUT, self.remaining(deadline)) * 1000
+                        ),
+                    )
+                    context = await asyncio.wait_for(
+                        browser.new_context(user_agent=USER_AGENT_FALLBACK),
+                        timeout=self.remaining(deadline),
+                    )
+                    reason = await self._collect_pages(context, run, deadline)
+                    run.finish(reason)
+                finally:
+                    for resource in (context, browser):
+                        if resource:
+                            try:
+                                await resource.close()
+                            except Exception as exc:
+                                run.errors.append(f"cleanup_error: {exc}")
+        except asyncio.CancelledError:
+            run.finish("cancelled")
+            raise
+        except Exception as exc:
+            run.errors.append(f"{type(exc).__name__}: {exc}")
+            run.finish("setup_or_browser_error")
+        return run
 
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, self._scrape_async(max_pages)).result()
-        return asyncio.run(self._scrape_async(max_pages))
+    async def _collect_pages(
+        self, context: BrowserContext, run: ScrapeRunResult, deadline: float
+    ) -> str:
+        limit = min(run.requested_pages or self.page_budget, self.page_budget)
+        semaphore = asyncio.Semaphore(3)
+        seen: set[str] = set()
+        for start in range(1, limit + 1, 3):
+            if not self.remaining(deadline):
+                return "deadline"
+            numbers = list(range(start, min(start + 3, limit + 1)))
+            completed: list[PageResult] = []
 
-    @staticmethod
-    def _extract_price(text: str) -> float:
-        """Extract price from card text using regex."""
-        match = re.search(r"(\d+(?:[.,]\d{2})?)\s*€", text)
-        if match:
-            return float(match.group(1).replace(",", "."))
-        return 0.0
-
-    @staticmethod
-    def _extract_availability(text: str) -> str:
-        """Extract availability status from card text."""
-        lower = text.lower()
-        if "in stock" in lower or "add to basket" in lower:
-            return "In Stock"
-        if "out of stock" in lower or "unavailable" in lower:
-            return "Out of Stock"
-        return "Unknown"
-
-    async def _scrape_async(self, max_pages: Optional[int]) -> List[Product]:
-        logger.info(f"Starting browser scrape of {self.base_url}")
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent=USER_AGENT_FALLBACK)
-            all_products = []
-            page_num = 1
-            consecutive_empty = 0
-            semaphore = asyncio.Semaphore(3)
+            async def collect(number: int) -> None:
+                result = await self._scrape_single_page(
+                    context, number, semaphore, deadline
+                )
+                completed.append(result)
+                run.pages.append(result)
 
             try:
-                while not max_pages or page_num <= max_pages:
-                    urls = self._batch_urls(page_num, max_pages)
-                    if not urls:
-                        break
-
-                    tasks = [
-                        self._scrape_single_page(context, url, semaphore)
-                        for url in urls
-                    ]
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    batch_products = self._collect_results(results)
-                    all_products.extend(batch_products)
-
-                    if batch_products:
-                        consecutive_empty = 0
-                    else:
-                        consecutive_empty += 1
-                        if consecutive_empty >= 2:
-                            logger.info("Stopping: consecutive empty batches.")
-                            break
-
-                    page_num += len(urls)
-                    if self.delay > 0:
-                        await asyncio.sleep(self.delay)
-            finally:
-                await browser.close()
-
-            logger.info(f"Browser scrape complete. Total products: {len(all_products)}")
-            return all_products
-
-    def _batch_urls(
-        self, page_num: int, max_pages: Optional[int], batch_size: int = 3
-    ) -> List[str]:
-        """Build the next bounded batch of paginated URLs."""
-        urls = []
-        for offset in range(batch_size):
-            current_page = page_num + offset
-            if max_pages and current_page > max_pages:
-                break
-            url = (
-                f"{self.base_url}?page={current_page}"
-                if current_page > 1
-                else self.base_url
-            )
-            urls.append(url)
-        return urls
-
-    @staticmethod
-    def _collect_results(results: List[Any]) -> List[Product]:
-        """Collect successful page results and log page-level failures."""
-        products = []
-        for result in results:
-            if isinstance(result, list):
-                products.extend(result)
-            else:
-                logger.error(f"Page error: {result}")
-        return products
+                await asyncio.wait_for(
+                    asyncio.gather(*(collect(n) for n in numbers)),
+                    timeout=self.remaining(deadline),
+                )
+            except asyncio.CancelledError:
+                finished = {page.number for page in completed}
+                run.pages.extend(
+                    PageResult(
+                        n, self.page_url(n), errors=["cancelled during collection"]
+                    )
+                    for n in numbers
+                    if n not in finished
+                )
+                run.pages.sort(key=lambda p: p.number)
+                raise
+            except asyncio.TimeoutError:
+                finished = {page.number for page in completed}
+                completed.extend(
+                    PageResult(n, self.page_url(n), errors=["run deadline exceeded"])
+                    for n in numbers
+                    if n not in finished
+                )
+                run.pages.extend(
+                    page
+                    for page in completed
+                    if page.number not in {p.number for p in run.pages}
+                )
+                run.pages.sort(key=lambda p: p.number)
+                return "deadline"
+            run.pages.sort(key=lambda p: p.number)
+            reason = None
+            for page in sorted(completed, key=lambda p: p.number):
+                page_reason = self.stopping_reason(run, seen, page)
+                reason = reason or page_reason
+            if reason:
+                return reason
+            if start + 3 <= limit:
+                await asyncio.sleep(min(self.delay, self.remaining(deadline)))
+        return (
+            "page_limit"
+            if run.requested_pages and run.requested_pages <= self.page_budget
+            else "page_budget"
+        )
 
     async def _scrape_single_page(
-        self, context: BrowserContext, url: str, semaphore: asyncio.Semaphore
-    ) -> List[Product]:
+        self,
+        context: BrowserContext,
+        number: int,
+        semaphore: asyncio.Semaphore,
+        deadline: float,
+    ) -> PageResult:
         async with semaphore:
-            page = await context.new_page()
-            products = []
+            result = PageResult(number, self.page_url(number))
+            page = None
             try:
-                logger.info(f"Scraping {url}...")
-                await page.goto(
-                    url, timeout=DEFAULT_TIMEOUT * 1000, wait_until="domcontentloaded"
-                )
-
-                # Wait for content to render
-                try:
-                    await page.wait_for_selector("div.product-card", timeout=5000)
-                except PlaywrightTimeoutError:
-                    # If timeout, we proceed to count (which will be 0)
-                    pass
-
-                # Use Playwright Locators instead of JS injection
-                # Tightened selector: removed generic 'css-' class match
-                cards = page.locator("div.product-card")
-                count = await cards.count()
-
-                if count == 0:
-                    logger.warning(f"No products on {url}")
-                    return []
-
-                for i in range(count):
-                    card = cards.nth(i)
-                    try:
-                        name_el = card.locator("h4")
-                        if await name_el.count() == 0:
-                            continue
-
-                        name = await name_el.inner_text()
-                        text = await card.inner_text()
-
-                        price = self._extract_price(text)
-                        availability = self._extract_availability(text)
-
-                        img_el = card.locator("img")
-                        img_src = (
-                            await img_el.get_attribute("src")
-                            if await img_el.count() > 0
-                            else None
-                        )
-
-                        products.append(
-                            Product(
-                                name=name,
-                                source_url=url,
-                                price=price,
-                                availability=availability,
-                                image_url=img_src,
-                            )
-                        )
-                    except Exception as e:
-                        logger.debug(f"Skipping unparsable card on {url}: {e}")
-                        continue
-
-            except Exception as e:
-                logger.exception(f"Failed to scrape {url}: {e}")
-                raise
+                page = await context.new_page()
+                result = await self._navigate(page, result, deadline)
+                return result
+            except Exception as exc:
+                result.errors = [f"{type(exc).__name__}: {exc}"]
+                return result
             finally:
-                await page.close()
+                if page:
+                    try:
+                        await page.close()
+                    except Exception as exc:
+                        result.errors.append(f"page_cleanup_error: {exc}")
+                        result.status = "partial" if result.products else "failed"
 
-            return products
+    async def _navigate(
+        self, page: Page, result: PageResult, deadline: float
+    ) -> PageResult:
+        for attempt in range(1, self.max_attempts + 1):
+            result.attempts = attempt
+            if not self.remaining(deadline):
+                result.errors = ["run deadline exceeded"]
+                return result
+            retry_after = None
+            try:
+                response = await page.goto(
+                    result.url,
+                    timeout=max(1, min(self.timeout, self.remaining(deadline)) * 1000),
+                    wait_until="domcontentloaded",
+                )
+                if response is None:
+                    result.errors = ["navigation returned no HTTP response"]
+                    return result
+                result.http_status = response.status
+                if 200 <= response.status < 300:
+                    return await self._read_rendered(page, result, deadline)
+                result.errors = [f"HTTP {response.status}"]
+                if response.status not in TRANSIENT_STATUSES:
+                    return result
+                retry_after = response.headers.get("retry-after")
+            except PlaywrightError as exc:
+                result.errors = [f"navigation_error: {exc}"]
+                if not self._transient_error(exc):
+                    return result
+            if attempt < self.max_attempts and not await self._pause_retry(
+                result, retry_after, deadline
+            ):
+                return result
+        return result
+
+    async def _pause_retry(
+        self, result: PageResult, retry_after: Optional[str], deadline: float
+    ) -> bool:
+        pause = retry_delay(result.attempts, retry_after)
+        if pause >= self.remaining(deadline):
+            result.errors.append("retry exceeds remaining run deadline")
+            return False
+        await asyncio.sleep(pause)
+        return True
+
+    @staticmethod
+    def _transient_error(error: PlaywrightError) -> bool:
+        return isinstance(error, PlaywrightTimeoutError) or any(
+            code in str(error)
+            for code in (
+                "ERR_CONNECTION_RESET",
+                "ERR_CONNECTION_CLOSED",
+                "ERR_TIMED_OUT",
+                "ERR_NAME_NOT_RESOLVED",
+            )
+        )
+
+    async def _read_rendered(
+        self, page: Page, result: PageResult, deadline: float
+    ) -> PageResult:
+        try:
+            await page.wait_for_function(
+                "args => document.querySelector(args.selector) || "
+                "document.body.innerText.includes(args.empty)",
+                arg={"selector": READY_SELECTOR, "empty": EMPTY_TEXT},
+                timeout=max(1, min(self.timeout, self.remaining(deadline)) * 1000),
+            )
+        except PlaywrightTimeoutError:
+            result.errors = [
+                "render_timeout: no product cards or confirmed empty state"
+            ]
+            return result
+        parsed = parse_page(await page.content(), result.url, result.number)
+        parsed.attempts = result.attempts
+        parsed.http_status = result.http_status
+        return parsed

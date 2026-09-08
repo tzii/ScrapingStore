@@ -24,6 +24,16 @@ jobs:
         pip install -r requirements-dev.txt
         pip install --no-deps -e .
 
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+
+    - name: Install browser test dependencies
+      run: |
+        npm ci --ignore-scripts
+        python -m playwright install --with-deps chromium
+
     - name: Lint with Black
       run: |
         black --check .
@@ -36,4 +46,4 @@ jobs:
         mypy cleaning scraper visualization *.py --ignore-missing-imports
 
     - name: Test with pytest
-      run: pytest --cov --cov-report=term-missing
+      run: pytest --run-browser --cov --cov-report=term-missing

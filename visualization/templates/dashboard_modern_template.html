@@ -31,7 +31,7 @@
     </script>
     <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <link href="https://unpkg.com/gridjs@6.2.0/dist/theme/mermaid.min.css" rel="stylesheet" />
     <script src="https://unpkg.com/gridjs@6.2.0/dist/gridjs.umd.js"></script>
@@ -174,7 +174,7 @@
                 <a href="#insights" class="px-3 py-1.5 rounded-md hover:text-accent transition-colors">Insights</a>
             </nav>
             <div class="flex items-center gap-3">
-                <a href="dashboard_terminal.html"
+                <a href="{{ terminal_href | e }}"
                     class="hidden md:flex items-center gap-2 text-[11px] font-mono tracking-wider uppercase px-3 py-1.5 rounded-md border transition-colors hover:text-accent hover:border-accent"
                     style="border-color:var(--border); color:var(--text-secondary);">&#9656; Terminal</a>
                 <button @click="$store.theme.toggle()" aria-label="Toggle color theme"
@@ -188,7 +188,7 @@
                     </svg>
                 </button>
                 <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-mono font-medium tracking-wide border" style="border-color:var(--border);">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> LIVE
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> SNAPSHOT
                 </div>
             </div>
         </div>
@@ -200,20 +200,31 @@
         <section id="overview" class="pt-10 pb-8 anim-in">
             <p class="text-[11px] font-mono uppercase tracking-[0.25em] text-accent mb-3">Product Intelligence</p>
             <h2 class="text-3xl lg:text-5xl font-black tracking-tight font-display leading-tight">Market snapshot,<br class="hidden lg:block"> beautifully decoded.</h2>
-            <p class="mt-3 text-sm max-w-xl" style="color:var(--text-secondary);">{{ kpi.total }} products scraped, cleaned and analyzed by the ScrapingStore pipeline. Last updated <time datetime="{{ generated_iso }}">{{ timestamp }}</time>.</p>
+            <p class="mt-3 text-sm max-w-xl" style="color:var(--text-secondary);">{{ kpi.total }} products in this report. Report generated <time datetime="{{ generated_iso }}">{{ timestamp }}</time>.</p>
         </section>
 
+        <p class="text-xs mb-4" style="color:var(--text-secondary);">Scope: {{ scope | e }}. Summaries, charts and insights describe the full report dataset; search and filters affect the table and CSV export.</p>
+
+        <details class="panel mb-6" id="collection-outcome">
+            <summary>{{ collection_label | e }}: {{ last_run.status | e if last_run else 'Not recorded' }}</summary>
+            {% if last_run %}
+            <p>Scope: {{ last_run.scope.description | e }}. Finished: {{ last_run.finished_at | e }}.</p>
+            <p>{{ last_run.pages_succeeded }} pages succeeded, {{ last_run.pages_failed }} failed, {{ last_run.pages_partial }} partial; {{ last_run.pages_outside_scope | default(0) }} probes beyond the confirmed end. Stop: {{ last_run.stop_reason | e }}.</p>
+            <p>Catalog rows may come from earlier collections. Missing products are not marked unavailable.</p>
+            <pre class="overflow-auto text-xs">{{ last_run | tojson(indent=2) | e }}</pre>
+            {% endif %}
+        </details>
         <!-- KPI cards -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div class="kpi-card gold anim-in anim-d1">
                 <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Total Products</p>
                 <p class="text-4xl lg:text-5xl font-bold tracking-tight font-display" id="kpi-total">0</p>
-                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">Scraped successfully</p>
+                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">In report dataset</p>
             </div>
             <div class="kpi-card emerald anim-in anim-d2">
-                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Avg Price</p>
+                <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Avg Known EUR Price</p>
                 <p class="text-4xl lg:text-5xl font-bold tracking-tight font-display"><span class="text-2xl">&euro;</span><span id="kpi-avg">0</span></p>
-                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">Range &euro;{{ kpi_min }} &ndash; &euro;{{ kpi_max }}</p>
+                <p class="text-[11px] font-mono mt-2" style="color:var(--text-secondary);">{{ kpi.known_prices }} usable EUR prices; {{ kpi.missing_prices }} missing. Range {{ kpi_min }} – {{ kpi_max }} EUR</p>
             </div>
             <div class="kpi-card rose anim-in anim-d3">
                 <p class="text-[10px] font-mono uppercase tracking-[0.15em] mb-3" style="color:var(--text-secondary);">Premium Items</p>
@@ -252,18 +263,21 @@
                 <span class="text-[10px] font-mono uppercase tracking-wider" style="color:var(--text-secondary);" x-text="filteredData.length + ' / ' + productsData.length + ' items'"></span>
             </div>
             <div class="flex flex-wrap items-center gap-3 mb-4">
-                <select x-model="filterAvail" @change="applyFilters()" class="field" aria-label="Filter by availability">
+                <input type="search" placeholder="Search products..." class="field" x-model="query.search" @input="applyFilters()" aria-label="Search catalog" aria-describedby="catalog-query-help">
+                <select x-model="query.availability" @change="applyFilters()" class="field" aria-label="Filter by availability">
                     <option value="">All availability</option>
                     <option value="In Stock">In Stock</option>
                     <option value="Out of Stock">Out of Stock</option>
                     <option value="Unknown">Unknown</option>
                 </select>
-                <input type="number" min="0" step="1" placeholder="Min &euro;" class="field w-24" x-model.number="filterMin" @input.debounce.250ms="applyFilters()" aria-label="Minimum price">
-                <input type="number" min="0" step="1" placeholder="Max &euro;" class="field w-24" x-model.number="filterMax" @input.debounce.250ms="applyFilters()" aria-label="Maximum price">
+                <input type="number" min="0" step="0.01" placeholder="Min &euro;" class="field w-24" x-model.number="query.min" @input="applyFilters()" aria-label="Minimum price">
+                <input type="number" min="0" step="0.01" placeholder="Max &euro;" class="field w-24" x-model.number="query.max" @input="applyFilters()" aria-label="Maximum price">
                 <button @click="resetFilters()" class="btn-ghost">Reset</button>
                 <div class="flex-1"></div>
-                <button @click="downloadCsv()" class="btn" aria-label="Download filtered data as CSV">&darr; Export CSV</button>
+                <button @click="downloadCsv()" class="btn" aria-label="Export all matching products as CSV">&darr; Export matching CSV</button>
             </div>
+            <p id="catalog-query-help" class="text-xs mb-4" style="color:var(--text-secondary);">Search product names, prices and availability. Export includes all matching rows across every page.</p>
+            <p id="catalog-match-count" role="status" aria-live="polite" class="text-xs mb-4" x-text="filteredData.length + ' matching products'"></p>
             <template x-if="productsData.length === 0">
                 <div class="py-16 text-center font-mono text-xs uppercase tracking-widest" style="color:var(--text-secondary);">No data yet &mdash; run the pipeline to populate this dashboard.</div>
             </template>
@@ -326,6 +340,8 @@
     <script id="top-products-data" type="application/json">{{ top_products | tojson }}</script>
     <script id="availability-data" type="application/json">{{ availability | tojson }}</script>
     <script id="kpi-data" type="application/json">{{ kpi | tojson }}</script>
+    <script id="statistics-data" type="application/json">{{ statistics | tojson }}</script>
+    <script id="report-metadata" type="application/json">{{ {"scope": scope, "generated_at": generated_iso, "collection_label": collection_label, "latest_collection": last_run} | tojson }}</script>
     <script id="chart-data" type="application/json">{{ chart_data | tojson }}</script>
 
     <script>
@@ -381,9 +397,7 @@
                 topProducts: topProductsData,
                 maxFranchise: Math.max(1, ...franchiseData.map(d => d.count)),
                 maxTopPrice: Math.max(1, ...topProductsData.map(p => Number(p.price) || 0)),
-                filterAvail: '',
-                filterMin: null,
-                filterMax: null,
+                query: { search: '', availability: '', min: null, max: null },
                 filteredData: productsData.slice(),
                 grid: null,
                 charts: {},
@@ -404,24 +418,30 @@
                 },
                 topWidth(p) { return Math.round(((Number(p.price) || 0) / this.maxTopPrice) * 100); },
                 franWidth(f) { return Math.round((f.count / this.maxFranchise) * 100); },
-                rows(data) { return data.map(p => [p.name || '', p.price || 0, p.availability || 'Unknown']); },
-                applyFilters() {
-                    const min = (this.filterMin === null || this.filterMin === '') ? -Infinity : Number(this.filterMin);
-                    const max = (this.filterMax === null || this.filterMax === '') ? Infinity : Number(this.filterMax);
-                    this.filteredData = productsData.filter(p => {
-                        const price = Number(p.price) || 0;
+                rows(data) { return data.map(p => [p.name || '', p.price, p.availability || 'Unknown', p.currency || 'EUR']); },
+                matchingProducts() {
+                    const search = this.query.search.trim().toLocaleLowerCase();
+                    const min = (this.query.min === null || this.query.min === '') ? -Infinity : Number(this.query.min);
+                    const max = (this.query.max === null || this.query.max === '') ? Infinity : Number(this.query.max);
+                    return productsData.filter(p => {
+                        const price = p.price;
+                        const known = typeof price === 'number' && Number.isFinite(price);
                         const avail = p.availability || 'Unknown';
-                        if (this.filterAvail && avail !== this.filterAvail) return false;
-                        return price >= min && price <= max;
+                        if (this.query.availability && avail !== this.query.availability) return false;
+                        if ((min !== -Infinity || max !== Infinity) && (!known || p.currency !== 'EUR')) return false;
+                        if (known && (price < min || price > max)) return false;
+                        return [p.name, known ? price.toFixed(2) : 'Price unavailable', avail].some(value =>
+                            String(value).toLocaleLowerCase().includes(search));
                     });
+                },
+                applyFilters() {
+                    this.filteredData = this.matchingProducts();
                     if (this.grid) {
                         this.grid.updateConfig({ data: this.rows(this.filteredData) }).forceRender();
                     }
                 },
                 resetFilters() {
-                    this.filterAvail = '';
-                    this.filterMin = null;
-                    this.filterMax = null;
+                    this.query = { search: '', availability: '', min: null, max: null };
                     this.applyFilters();
                 },
                 downloadCsv() {
@@ -430,9 +450,9 @@
                         if (/^[=+\-@]/.test(text)) text = "'" + text;
                         return '"' + text.replace(/"/g, '""') + '"';
                     };
-                    const header = ['name', 'price', 'availability', 'image_url', 'scraped_at'];
+                    const header = ['name', 'price', 'currency', 'price_status', 'price_raw', 'availability', 'image_url', 'scraped_at', 'source_key', 'identity_kind', 'product_url', 'last_run_id'];
                     const lines = [header.join(',')];
-                    this.filteredData.forEach(p => { lines.push(header.map(k => esc(p[k])).join(',')); });
+                    this.matchingProducts().forEach(p => { lines.push(header.map(k => esc(p[k])).join(',')); });
                     const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
                     const a = document.createElement('a');
                     a.href = URL.createObjectURL(blob);
@@ -510,18 +530,18 @@
                     this.grid = new gridjs.Grid({
                         columns: [
                             { name: 'Product', width: '50%' },
-                            { name: 'Price', width: '20%', formatter: (cell) => gridjs.html('<span class="font-mono">\u20ac' + parseFloat(cell || 0).toFixed(2) + '</span>') },
+                            { name: 'Price', width: '20%', formatter: (cell, row) => gridjs.html('<span class="font-mono">' + (cell === null ? 'Price unavailable' : Number(cell).toFixed(2) + ' ' + escapeHtml(row.cells[3].data)) + '</span>') },
                             { name: 'Status', width: '30%', formatter: (cell) => {
                                 const c = String(cell || '');
                                 const color = c.includes('In Stock') ? '#34d399' : c.includes('Out') ? '#fb7185' : '#64748b';
                                 return gridjs.html('<span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:7px;height:7px;border-radius:9999px;background:' + color + ';display:inline-block;"></span>' + escapeHtml(c) + '</span>');
-                            } }
+                            } },
+                            { name: 'Currency', hidden: true }
                         ],
                         data: this.rows(this.filteredData),
-                        search: true,
+                        search: false,
                         sort: true,
-                        pagination: { limit: 12 },
-                        language: { search: { placeholder: 'Search products...' } }
+                        pagination: { limit: 12, resetPageOnUpdate: true }
                     }).render(document.getElementById('grid-table'));
                 }
             };

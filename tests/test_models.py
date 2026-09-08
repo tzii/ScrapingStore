@@ -55,7 +55,8 @@ def test_product_zero_price_allowed():
 def test_product_defaults():
     """Test default values."""
     p = Product(name="Test", source_url="http://test.com")
-    assert p.price == 0.0
+    assert p.price is None
+    assert p.price_status == "missing"
     assert p.currency == "EUR"
     assert p.availability == "Unknown"
     assert p.image_url is None

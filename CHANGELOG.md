@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- Archive immutable per-run product observations with catalog updates and manifests in one transaction; retain newer catalog values when older collections finish later.
+- Add `runs`, `inspect-run --products`, and `generate-report --run-id` for inspecting and replaying saved collection evidence, including empty and partial runs.
+- Preserve original manifests on conflicting retries and distinguish historical records without captured observations.
+- Retain collected evidence after unexpected collector errors, finalize static cancellation during delays, mark late responses incomplete, and allow recovery after rejected-only pages.
+- Preserve structured complete, partial, failed, empty and cancelled collection outcomes with per-page manifests and publication gating.
+- Share source-specific parsing, preserve missing prices and raw signals, and exclude unknown prices from statistics without dropping free products.
+- Upsert by unique source identities and preserve weak identities without collapsing equal titles.
+- Migrate legacy SQLite catalogs transactionally, retaining the original table and treating historical zero prices as unknown.
+- Bound browser and static retries, handle HTTP failures explicitly, detect repeated pages, and expose a public async browser API.
+- Include collection status in reports and export provenance with UTC timestamps.
+
+- Select the browser scraper by default for the configured JavaScript source.
+- Render both dashboard themes from one stored-catalog snapshot with shared statistics and report time.
+- Correct even medians, include zero prices consistently, and count histogram boundary values once.
+- Resolve sibling report links for local, GitHub Pages and custom output paths.
+- Share search, availability and price query state between the catalog and all-pages CSV export; label summaries as full-catalog values.
+- Add fixture-based CLI and browser regressions and run the browser checks in CI.
+
 ## [1.2.0] - 2026-06-12
 ### Added
 - Redesigned analytics dashboard with filters, CSV export, availability insights, and top-product rankings.

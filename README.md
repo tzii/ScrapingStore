@@ -11,7 +11,7 @@
 
 A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration.
 
-### 🚀 **[Live Demo](https://tzii.github.io/ScrapingStore/)** | **[Terminal View](https://tzii.github.io/ScrapingStore/dashboard_terminal.html)**
+### 🚀 **[Snapshot Demo](https://tzii.github.io/ScrapingStore/)** | **[Terminal View](https://tzii.github.io/ScrapingStore/dashboard_terminal.html)**
 
 ## 📸 Dashboard Preview
 
@@ -26,7 +26,7 @@ A complete end-to-end data engineering portfolio project demonstrating web scrap
 | Category | Technologies & Techniques |
 |----------|---------------------------|
 | **Web Scraping** | Playwright (headless browser), BeautifulSoup, async/await, pagination handling |
-| **Data Cleaning** | Pandas, numpy, duplicate removal, data normalization |
+| **Data Cleaning** | Normalization, missing-value provenance, source identity deduplication |
 | **Visualization** | Chart.js, Grid.js, Alpine.js, Jinja2 HTML dashboards (modern + terminal) |
 | **Database** | SQLModel ORM, SQLite, upsert logic |
 | **Data Export** | Power BI-ready CSV (UTF-8 BOM), automated pipeline |
@@ -129,9 +129,11 @@ playwright install chromium
 
 ### Running the Pipeline
 
+The browser scraper is the default, including in Docker, and supports JavaScript-rendered content. Install Chromium as shown above. The current sandbox also exposes product markup in its HTML; use `--type static` explicitly for server-rendered pages or fixtures.
+
 ```bash
-# Quick test: scrape 2 pages (~64 products)
-python main.py scrape --pages 2
+# Quick test: scrape 2 pages with the browser (~64 products)
+python main.py scrape --type browser --pages 2
 
 # Default: scrape 10 pages (~320 products)
 python main.py scrape
@@ -142,7 +144,7 @@ python main.py scrape --all
 # Custom delay between requests (be respectful!)
 python main.py scrape --pages 10 --delay 2.0
 
-# Use browser scraper for JS-rendered pages
+# Explicit browser selection (also the default)
 python main.py scrape --type browser --pages 5
 
 # Show available commands without starting a scrape
@@ -177,6 +179,76 @@ DATA_DIR="/path/to/data"
 DOCS_DIR="/path/to/docs"
 ```
 
+### Report scope and catalog search
+
+Both reports describe the **current stored catalog**, selected once after persistence, including previously stored products. An empty scrape does not switch the report to a different dataset. The report-generation timestamp is shared by both views; it is not a collection timestamp or a guarantee that collection was complete.
+
+In the modern report, search (product name, formatted price or availability), availability and inclusive price bounds form one catalog query. The table and CSV export use that query. Export includes **all matching rows across all pages**. Reset clears the whole query. Summaries, charts and insights always describe the full stored catalog and are labelled accordingly.
+
+Both themes share price statistics and histogram bins. Zero prices are included, an even median averages the two middle values, and the last histogram bin includes its upper boundary. Only usable EUR prices contribute to price summaries. Unknown prices remain blank in CSV and appear as “Price unavailable” in the catalog. With a price bound selected, records without a usable EUR price are excluded; without bounds they remain searchable and exportable.
+
+Navigation links follow the generated output paths: local `data/dashboard.html`, GitHub Pages `docs/index.html`, or configured output directories. Programmatic callers with custom filenames can pass `terminal_path` to `generate_dashboard` and `dashboard_path` to `generate_terminal_dashboard`.
+
+### Collection outcomes and publication
+
+Every collection returns a `ScrapeRunResult` containing products, per-page outcomes, errors, retry attempts, HTTP statuses, scope, UTC timestamps and the reason it stopped. The CLI persists the manifest in SQLite and `data/runs/<run-id>.json`.
+
+| Outcome | Meaning | CLI exit | Automatic CSV/reports |
+|---------|---------|----------|-----------------------|
+| `complete` | Requested scope processed successfully | 0 | Generated |
+| `empty` | Successful collection with no products | 0 | Reports generated; an empty catalog does not produce a CSV |
+| `partial` | Some useful pages, but failures, rejected cards, identity conflicts or a budget stop | 2 | Only with `--allow-partial` |
+| `failed` | No page processed successfully | 1 | Skipped |
+| `cancelled` | User interrupted collection | 130 | Skipped |
+
+Valid observations from partial collections are saved. `--allow-partial` keeps exit code 2 and the warning; it does not relabel the run complete. Existing report files remain untouched when automatic publication is skipped. Manual `generate-report` renders the stored catalog with the latest collection status, including failures. CSV exports include price status, source identity, last observed run and UTC collection time; an adjacent `.manifest.json` identifies the catalog scope and latest collection.
+
+```bash
+python main.py scrape --pages 5
+python main.py scrape --all --page-budget 200 --run-timeout 1800
+python main.py scrape --pages 5 --allow-partial
+```
+
+`complete` means complete for the requested scope, not necessarily the entire source. A two-page sample cannot establish that unseen products are unavailable. Historical catalog rows remain until explicitly managed.
+
+HTTP 429 and selected transient server/transport errors receive bounded retries, with `Retry-After` and a deadline. HTTP access denials and unrecognized layouts are failures, not empty pages. The adapter confirms an empty catalog using the source's explicit empty message, and recognizes a disabled Next link as the source end. Repeated pages, three consecutive failed pages, the page budget and the deadline stop collection. Speculative page requests beyond a confirmed source end remain in the manifest as `outside_scope`; they do not change the in-scope result or add products to it. Browser concurrency is three; `--delay` is a delay **between batches**, not a minimum spacing between individual requests.
+
+Library callers now use `scraper.scrape(...).products` and inspect `.status`/`.manifest()`. Inside an event loop, use `await browser_scraper.scrape_async(...)`; the synchronous wrapper does not block an existing loop. Caller-owned static scrapers and database managers expose `close()`; the CLI closes its resources.
+
+### Price evidence, identity and existing databases
+
+Both acquisition methods share the source adapter. Prices come from dedicated current-price elements, not the first euro amount in a card description. The EUR parser accepts two-decimal values with comma or dot decimals, grouped thousands, and a leading or trailing currency marker. Negative values, ambiguous multiple prices and unsupported formats retain their original text and a parsing status with `price = null`. A literal zero remains a known price. Numeric prices are still stored as floats; raw source text is retained.
+
+Availability comes from an explicit stock element or enabled purchase control. Contradictory signals produce `Unknown` with a reason. A missing or disabled control alone does not establish that a product is out of stock.
+
+Products use a source-native ID or a detail URL, preserving variant query parameters. SQLite enforces unique source keys and performs atomic upserts. A rename updates the same identity; equal names with different identities survive. Records without a stable identity receive a weak key and remain separate, including across runs. Their counts are reported in the manifest; they cannot support reliable change comparisons.
+
+When an older SQLite database is first opened, the application migrates its catalog in a transaction and keeps the original table as **`product_legacy_v1`**. Historical zero values become `legacy_unknown` with a null price because their original meaning cannot be recovered. Legacy rows retain their IDs and are not automatically matched to newly collected products by name; they can coexist with newly identified records. Back up the database before manual legacy reconciliation. The migration refuses to overwrite an existing backup table.
+
+### Saved runs and observation history
+
+New collections save their accepted product observations, run manifest, and catalog updates in one SQLite transaction. Each observation retains its collected time, identity, raw price and availability signals, parsing status, and parser version. Later price changes or renames update the current catalog without rewriting earlier observations. The catalog retains the newest observation by collected time, even if an older run finishes later. An exact retry does not change the catalog; different evidence submitted under an existing run ID is rejected. A rejected retry writes a separate attempt manifest without overwriting the original JSON sidecar.
+
+```bash
+# Find saved run IDs and their outcomes
+python main.py runs --limit 10
+
+# Inspect page outcomes, failures, scope, counts and stop reason
+python main.py inspect-run RUN_ID
+
+# Include the original product values and parsing evidence as JSON
+python main.py inspect-run RUN_ID --products
+
+# Regenerate both dashboard themes from that run's accepted observations
+python main.py generate-report --run-id RUN_ID
+```
+
+The selected-run report uses the usual output paths and labels its scope and collection status. An empty saved run generates an empty report, even when the current catalog contains products. A partial run remains labelled partial. Report generation time is separate from each product's collection time. Without `--run-id`, reports continue to show the current stored catalog. Catalog reports and exports read product values and the latest-run metadata from one database snapshot, including during concurrent collections.
+
+History begins with collections saved by this version. Existing catalogs and manifest-only runs remain readable, but cannot be reconstructed as historical reports. The migration adds the history table without inventing past observations. History preserves accepted structured evidence; raw page archives, change comparisons, and a policy for marking stale or absent products remain future work. Missing a product in a run does not mark it unavailable.
+
+The browser collector enforces a wall-clock collection deadline. Static Requests timeouts bound socket inactivity: a slowly streaming response may return after the configured run deadline. Its evidence is retained and the run is marked incomplete rather than reported as successful completion.
+
 ### Running Tests
 
 ```bash
@@ -185,6 +257,17 @@ pytest
 # With coverage report
 pytest --cov=scraper --cov=cleaning --cov=visualization --cov-report=term-missing
 ```
+
+Browser regressions require Node.js/npm and Playwright Chromium:
+
+```bash
+pip install -r requirements-dev.txt
+npm ci --ignore-scripts
+python -m playwright install chromium
+pytest --run-browser
+```
+
+The browser tests serve pinned Alpine.js, Grid.js and Chart.js dependencies locally, intercept external requests, and test the generated reports with fixture data. They cover combined search/filter/export, pagination, reset, empty results, zero prices, hostile-looking text and navigation in both directions. These are behavior tests; the Tailwind CDN styling is not exercised. CI installs Chromium and runs them explicitly; plain `pytest` skips browser tests.
 
 ---
 
@@ -208,15 +291,14 @@ pytest --cov=scraper --cov=cleaning --cov=visualization --cov-report=term-missin
 - Structured data extraction (price, availability, images) at scrape time
 - Async/await with concurrency limiting (semaphore) for browser scraper
 - Rate limiting and configurable delay between requests
-- Automatic pagination with consecutive-empty-page detection
-- Retry logic with exponential backoff (static scraper)
+- Pagination with confirmed end signals and hard budgets
+- Bounded retries, page outcomes and explicit stop reasons for both scrapers
 
 ### Data Cleaner (`cleaning/data_cleaner.py`)
 
-- Availability status normalization (`In Stock` / `Out of Stock` / `Unknown`)
-- Duplicate detection and removal by product name
-- Name whitespace trimming
-- Vectorized operations via Pandas + NumPy for performance
+- Availability normalization with explicit unknown/conflicting states
+- Deduplication by source identity, with conflicting observations reported
+- Name whitespace trimming and preservation of missing prices and raw evidence
 
 ### Visualization (`visualization/`)
 
@@ -262,8 +344,8 @@ This project targets a public scraping sandbox explicitly intended for practice.
 
 ## ⚠️ Known Limitations
 
-- **Static scraper vs. JS-rendered sites**: The `static` scraper uses `requests` + BeautifulSoup, which cannot execute JavaScript. The target sandbox site is JS-rendered, so **use `--type browser`** for actual scraping. The static scraper is included to demonstrate the pattern and works with server-rendered HTML.
-- **Upsert by name**: Products are matched by `name` during upsert. If two genuinely different products share the same name, only the latest will be kept.
+- **Source rendering**: The browser scraper supports JavaScript. Static scraping can only use markup supplied in the HTTP response; it cannot wait for client-rendered cards.
+- **Weak and legacy identities**: Records without a stable source identity are preserved separately. They are not suitable for reliable price-history comparisons.
 - **Sandbox-specific**: The CSS selectors (`div.product-card`, `h4`) are tailored to the Oxylabs sandbox. Adapting to a different site would require updating the selectors.
 
 ---
@@ -274,7 +356,7 @@ This project targets a public scraping sandbox explicitly intended for practice.
 - **Playwright** - Browser automation for JS-rendered sites
 - **BeautifulSoup4** - HTML parsing
 - **Requests** - HTTP client
-- **Pandas / NumPy** - Data manipulation
+- **Pandas** - Report statistics and CSV export
 - **SQLModel / Pydantic** - ORM and data validation
 - **Typer / Rich** - CLI interface
 - **Chart.js / Grid.js / Alpine.js** - Frontend visualization

@@ -21,11 +21,21 @@ def test_save_and_get_products(db_manager):
 
 
 def test_upsert_updates_existing(db_manager):
-    """Test that saving a product with the same name updates it."""
-    p1 = Product(name="Old Name", source_url="http://test.com/1", price=10.0)
+    """Test that saving a product with the same source identity updates it."""
+    p1 = Product(
+        name="Old Name",
+        source_id="stable-1",
+        source_url="http://test.com/1",
+        price=10.0,
+    )
     db_manager.save_products([p1])
 
-    p2 = Product(name="Old Name", source_url="http://test.com/1", price=50.0)
+    p2 = Product(
+        name="Old Name",
+        source_id="stable-1",
+        source_url="http://test.com/1",
+        price=50.0,
+    )
     db_manager.save_products([p2])
 
     saved = db_manager.get_all_products()
@@ -37,7 +47,8 @@ def test_upsert_updates_all_mutable_fields(db_manager):
     """Upserts should not leave stale metadata behind."""
     original = Product(
         name="Product",
-        source_url="http://old.example",
+        source_id="stable-2",
+        source_url="http://example.test/old-listing",
         price=10.0,
         currency="EUR",
         category="Old",
@@ -45,7 +56,8 @@ def test_upsert_updates_all_mutable_fields(db_manager):
     )
     updated = Product(
         name="Product",
-        source_url="http://new.example",
+        source_id="stable-2",
+        source_url="http://example.test/new-listing",
         price=12.0,
         currency="USD",
         availability="In Stock",
@@ -58,7 +70,7 @@ def test_upsert_updates_all_mutable_fields(db_manager):
     db_manager.save_products([updated])
 
     saved = db_manager.get_all_products()[0]
-    assert saved.source_url == "http://new.example"
+    assert saved.source_url == "http://example.test/new-listing"
     assert saved.currency == "USD"
     assert saved.availability == "In Stock"
     assert saved.image_url == "new.jpg"

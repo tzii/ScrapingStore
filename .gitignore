@@ -27,6 +27,7 @@ venv/
 ENV/
 env/
 .venv/
+node_modules/
 
 # IDE
 .vscode/
@@ -65,3 +66,8 @@ playwright/.cache/
 CODE_REVIEW.md
 *.xml
 *.log
+
+# Collection evidence (generated locally)
+data/runs/
+data/pytest-*/
+data/*.manifest.json

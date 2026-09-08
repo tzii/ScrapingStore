@@ -43,7 +43,11 @@ typecheck:
 test:
   stage: test
   script:
-    - pytest --cov --cov-report=term-missing --junitxml=report.xml
+    - apt-get update
+    - apt-get install -y --no-install-recommends nodejs npm
+    - npm ci --ignore-scripts
+    - python -m playwright install --with-deps chromium
+    - pytest --run-browser --cov --cov-report=term-missing --junitxml=report.xml
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     when: always
