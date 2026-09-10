@@ -1,8 +1,4 @@
-# 🛒 Web Scraping Portfolio Project
-
-<p align="center">
-  <img src="assets/project_logo.png" alt="ScrapingStore Logo" width="600"/>
-</p>
+# 🛒 ScrapingStore
 
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
