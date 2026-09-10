@@ -17,9 +17,33 @@ Version **2.0.1** adds saved-run comparisons and visible observation freshness. 
 
 The demo preserves 3,000 archived observations from December 2025. It demonstrates the interface, not current market prices or stock. Both themes display the age of that evidence.
 
-## 📸 Dashboard Preview
+## 📸 Dashboard Previews
 
-![Modern Dashboard](assets/dashboard_modern.png)
+### Modern analytics
+
+Price distribution, high-price outliers, availability and observation freshness in one view. Switch between dark and light themes in the [interactive demo](https://tzii.github.io/ScrapingStore/).
+
+![Current modern dashboard in dark mode, showing catalog statistics, price and availability charts, and observation freshness](assets/dashboard_modern.png)
+
+<details>
+<summary><strong>Explore the catalog: search, filters and CSV export</strong></summary>
+
+Search by product name, price or availability; combine stock and price filters; export every matching row across all pages. Each row shows when the product was observed and how old that evidence is.
+
+![Current product catalog filtered to Mario titles last observed in stock, with price bounds, collection timestamps, freshness labels and CSV export](assets/dashboard_catalog.jpg)
+
+</details>
+
+<details>
+<summary><strong>Explore the terminal dashboard</strong></summary>
+
+The [terminal view](https://tzii.github.io/ScrapingStore/dashboard_terminal.html) presents the same snapshot with an ASCII price histogram, summary statistics, keyword counts and an observation replay.
+
+![Current terminal dashboard with observation freshness, ASCII price distribution, outlier details and archived observation replay](assets/dashboard_terminal.png)
+
+</details>
+
+Screenshots show the archived demo: **3,000 observations collected on 11 December 2025**. Availability is the last observed signal; freshness is assessed when the report is generated.
 
 > **Made by Simone** — Student Project
 
@@ -32,7 +56,7 @@ The demo preserves 3,000 archived observations from December 2025. It demonstrat
 | **Web Scraping** | Playwright (headless browser), BeautifulSoup, async/await, pagination handling |
 | **Data Cleaning** | Normalization, missing-value provenance, source identity deduplication |
 | **Visualization** | Chart.js, Grid.js, Alpine.js, Jinja2 HTML dashboards (modern + terminal) |
-| **Database** | SQLModel ORM, SQLite, upsert logic |
+| **Database & History** | SQLModel, SQLite, atomic upserts, immutable run observations, saved-run comparisons |
 | **Data Export** | Power BI-ready CSV (UTF-8 BOM), automated pipeline |
 | **DevOps** | Docker, GitHub Actions, GitLab CI, pre-commit hooks, pytest |
 
@@ -41,15 +65,18 @@ The demo preserves 3,000 archived observations from December 2025. It demonstrat
 ## 🏗️ Architecture
 
 ```mermaid
-graph TD
-    User[User] --> CLI[CLI (main.py)]
-    CLI --> Scraper[Scraper Module]
-    Scraper -->|Structured Products| Cleaner[Cleaner Module]
-    Cleaner -->|Validated Products| DB[Database (SQLModel)]
-    DB -->|Query| Dashboard[Dashboard Generator]
-    DB -->|Export| CSV[CSV File]
-    Dashboard -->|HTML| Browser[Browser View]
+flowchart TD
+    CLI["CLI (main.py)"] --> Scraper["Scrapers: Playwright or Requests + BeautifulSoup"]
+    Scraper -->|Products and collection outcomes| Cleaner["Evidence-aware cleaning"]
+    Cleaner --> DB[("SQLite (SQLModel): catalog, runs and observations")]
+    DB -->|Current catalog or saved run| Snapshot["Shared report snapshot"]
+    Snapshot --> Modern["Modern HTML dashboard"]
+    Snapshot --> Terminal["Terminal HTML dashboard"]
+    DB -->|Current catalog| CSV["Power BI CSV + manifest"]
+    DB -->|Saved run pair| Compare["Change report (JSON)"]
 ```
+
+Both dashboard themes use the same report snapshot. Collection outcomes control automatic report and CSV generation; saved runs can also be inspected, compared and rendered later.
 
 ---
 
@@ -57,10 +84,11 @@ graph TD
 
 This project scrapes product data from the [Oxylabs Sandbox E-commerce](https://sandbox.oxylabs.io/products) website and processes it through a complete data pipeline:
 
-1. **Web Scraping** - Extract ~3000 products using Playwright browser automation
-2. **Data Cleaning** - Normalize and deduplicate data with Pandas
-3. **Visualization** - Interactive dashboards with Chart.js and Grid.js
-4. **Power BI Export** - Generate analysis-ready CSV files
+1. **Collect** - Scrape a page sample or the full source with Playwright or Requests, recording page outcomes and collection scope.
+2. **Clean** - Normalize names and availability, preserve unknown prices and deduplicate by source identity.
+3. **Store & Compare** - Update the SQLite catalog, retain immutable observations and compare saved runs.
+4. **Explore** - Generate modern and terminal dashboards with shared statistics, catalog search and observation freshness.
+5. **Export** - Produce Power BI-ready CSV files with collection provenance.
 
 ---
 
@@ -89,6 +117,10 @@ ScrapingStore/
 │   ├── test_models.py
 │   └── test_cli.py
 ├── data/                           # Output directory (gitignored)
+├── docs/                           # Archived demo for GitHub Pages
+├── assets/                         # Logo and current UI screenshots
+├── scripts/                        # Demo refresh, screenshot capture and wheel checks
+├── comparison.py                   # Evidence-aware saved-run comparisons
 ├── config.py                       # Centralized configuration
 ├── database.py                     # SQLModel database manager
 ├── models.py                       # Pydantic/SQLModel data models with validation
@@ -262,6 +294,15 @@ Both themes count observations within seven days, over seven days old, and witho
 
 To refresh the archived showcase with the current templates while preserving its collection times, run `python -m scripts.refresh_demo` from the repository root. To replace it with a newly collected catalog, use `scrapingstore generate-report --docs` after a successful collection.
 
+To update the README screenshots after changing the UI, install Playwright Chromium and run:
+
+```bash
+python -m scripts.refresh_demo
+python -m scripts.capture_readme
+```
+
+The capture script opens the checked-in demo in Chromium, waits for fonts, charts and catalog rows, and captures the overview, a filtered catalog and the terminal view. Internet access is required for the demo's CDN libraries and web fonts.
+
 The browser collector enforces a wall-clock collection deadline. Static Requests timeouts bound socket inactivity: a slowly streaming response may return after the configured run deadline. Its evidence is retained and the run is marked incomplete rather than reported as successful completion.
 
 ### Running Tests
@@ -327,10 +368,7 @@ The browser tests serve pinned Alpine.js, Grid.js and Chart.js dependencies loca
 - Price must be finite and non-negative; name must not be empty
 - Automatic UTC timestamps on creation
 
-#### Terminal Dashboard Mode
-The project also includes a retro-style terminal dashboard for CLI enthusiasts:
-
-![Terminal Dashboard](assets/dashboard_terminal.png)
+See the [dashboard previews](#-dashboard-previews) for current screenshots of both views and the catalog controls.
 
 ---
 
