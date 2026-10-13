@@ -1,4 +1,4 @@
-# 🛒 ScrapingStore
+# ScrapingStore
 
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
@@ -9,11 +9,11 @@ A product observation pipeline with a searchable dashboard, immutable collection
 
 Version **2.0.1** adds saved-run comparisons and visible observation freshness. [Release and migration notes](RELEASE.md) explain the library API changes and legacy database upgrade.
 
-### 🚀 **[Snapshot Demo](https://tzii.github.io/ScrapingStore/)** | **[Terminal View](https://tzii.github.io/ScrapingStore/dashboard_terminal.html)**
+### **[Snapshot Demo](https://tzii.github.io/ScrapingStore/)** | **[Terminal View](https://tzii.github.io/ScrapingStore/dashboard_terminal.html)**
 
-The demo preserves 3,000 archived observations from December 2025. It demonstrates the interface, not current market prices or stock. Both themes display the age of that evidence.
+The demo preserves 3,000 archived observations from December 2025. It demonstrates the interface, not current market prices or stock. Both themes show how old that data is.
 
-## 📸 Dashboard Previews
+## Dashboard Previews
 
 ### Modern analytics
 
@@ -41,11 +41,9 @@ The [terminal view](https://tzii.github.io/ScrapingStore/dashboard_terminal.html
 
 Screenshots show the archived demo: **3,000 observations collected on 11 December 2025**. Availability is the last observed signal; freshness is assessed when the report is generated.
 
-> **Made by Simone** — Student Project
-
 ---
 
-## ✨ Features & Skills Demonstrated
+## Features
 
 | Category | Technologies & Techniques |
 |----------|---------------------------|
@@ -58,7 +56,7 @@ Screenshots show the archived demo: **3,000 observations collected on 11 Decembe
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
@@ -76,7 +74,7 @@ Both dashboard themes use the same report snapshot. Collection outcomes control 
 
 ---
 
-## 🎯 Project Overview
+## Project Overview
 
 This project scrapes product data from the [Oxylabs Sandbox E-commerce](https://sandbox.oxylabs.io/products) website and processes it through a complete data pipeline:
 
@@ -88,7 +86,7 @@ This project scrapes product data from the [Oxylabs Sandbox E-commerce](https://
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ScrapingStore/
@@ -131,7 +129,7 @@ ScrapingStore/
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -323,7 +321,7 @@ The browser tests serve pinned Alpine.js, Grid.js and Chart.js dependencies loca
 
 ---
 
-## 📊 Output Files
+## Output Files
 
 | File | Description |
 |------|-------------|
@@ -335,7 +333,7 @@ The browser tests serve pinned Alpine.js, Grid.js and Chart.js dependencies loca
 
 ---
 
-## 🔧 Module Details
+## Module Details
 
 ### Web Scraper (`scraper/`)
 
@@ -364,11 +362,11 @@ The browser tests serve pinned Alpine.js, Grid.js and Chart.js dependencies loca
 - Price must be finite and non-negative; name must not be empty
 - Automatic UTC timestamps on creation
 
-See the [dashboard previews](#-dashboard-previews) for current screenshots of both views and the catalog controls.
+See the [dashboard previews](#dashboard-previews) for current screenshots of both views and the catalog controls.
 
 ---
 
-## 📈 Power BI Integration
+## Power BI Integration
 
 The `products_powerbi.csv` file is formatted for seamless Power BI import:
 
@@ -379,7 +377,7 @@ The `products_powerbi.csv` file is formatted for seamless Power BI import:
 
 ---
 
-## 🤝 Responsible Scraping
+## Responsible Scraping
 
 This project targets a public scraping sandbox explicitly intended for practice. When adapting it to other sites:
 
@@ -391,7 +389,7 @@ This project targets a public scraping sandbox explicitly intended for practice.
 
 ---
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 - **Source rendering**: The browser scraper supports JavaScript. Static scraping can only use markup supplied in the HTTP response; it cannot wait for client-rendered cards.
 - **Weak and legacy identities**: Records without a stable source identity are preserved separately. They are not suitable for reliable price-history comparisons.
@@ -399,7 +397,7 @@ This project targets a public scraping sandbox explicitly intended for practice.
 
 ---
 
-## 🛠️ Technologies
+## Technologies
 
 - **Python 3.9+**
 - **Playwright** - Browser automation for JS-rendered sites
@@ -415,12 +413,6 @@ This project targets a public scraping sandbox explicitly intended for practice.
 
 ---
 
-## 📝 License
+## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  <b>Made by Simone</b> • Student Project • 2026
-</p>
