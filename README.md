@@ -362,7 +362,7 @@ The browser tests serve pinned Alpine.js, Grid.js and Chart.js dependencies loca
 - Price must be finite and non-negative; name must not be empty
 - Automatic UTC timestamps on creation
 
-See the [dashboard previews](#-dashboard-previews) for current screenshots of both views and the catalog controls.
+See the [dashboard previews](#dashboard-previews) for current screenshots of both views and the catalog controls.
 
 ---
 
@@ -416,4 +416,3 @@ This project targets a public scraping sandbox explicitly intended for practice.
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-

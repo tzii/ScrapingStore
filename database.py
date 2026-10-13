@@ -1,7 +1,7 @@
 """SQLite persistence for the current catalog and immutable collection evidence."""
 
 import json
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -22,6 +22,13 @@ HISTORY_VERSION = 1
 def _json(value: Any) -> str:
     """Stable serialization makes identical retries independent of dictionary order."""
     return json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True)
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Compare instants in UTC because SQLite discards datetime offsets."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 class DatabaseManager:
@@ -63,7 +70,9 @@ class DatabaseManager:
                     identity_kind="legacy",
                     parser_version="legacy",
                 )
-                products.append(Product.model_validate(values).model_dump())
+                product = Product.model_validate(values).model_dump()
+                product["scraped_at"] = _as_utc(product["scraped_at"])
+                products.append(product)
             connection.exec_driver_sql(
                 "ALTER TABLE product RENAME TO product_legacy_v1"
             )
@@ -83,12 +92,7 @@ class DatabaseManager:
     def _upsert_products(connection: Connection, products: List[Product]) -> None:
         for product in products:
             values = product.model_dump(exclude={"id"})
-            # Compare instants in UTC because SQLite discards datetime offsets.
-            values["scraped_at"] = (
-                product.scraped_at.replace(tzinfo=timezone.utc)
-                if product.scraped_at.tzinfo is None
-                else product.scraped_at.astimezone(timezone.utc)
-            )
+            values["scraped_at"] = _as_utc(product.scraped_at)
             statement = insert(Product).values(**values)
             statement = statement.on_conflict_do_update(
                 index_elements=["source_key"],
