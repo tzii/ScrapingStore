@@ -97,8 +97,9 @@ def test_browser_changed_layout_is_failure(request, monkeypatch):
 
 
 def test_deadline_retains_completed_pages_and_cancels_pending_work():
-    from unittest.mock import AsyncMock
     import time
+    from unittest.mock import AsyncMock
+
     from models import Product
     from scraper.results import PageResult
 
@@ -136,8 +137,8 @@ def test_deadline_retains_completed_pages_and_cancels_pending_work():
 
 
 def test_page_is_closed_when_async_collection_is_cancelled():
-    from unittest.mock import AsyncMock
     import time
+    from unittest.mock import AsyncMock
 
     async def scenario():
         context = AsyncMock()

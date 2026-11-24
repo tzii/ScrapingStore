@@ -1,44 +1,26 @@
-from pathlib import Path
-from typing import Optional, Union
+"""Compatibility shim for the 2.x ``generate_dashboard(..., terminal_path=...)`` call."""
 
-from jinja2 import Environment, FileSystemLoader
+import warnings
+from typing import Optional
 
-from config import DASHBOARD_HTML_PATH, TEMPLATES_DIR
-from database import DatabaseManager
-from logger import get_logger
-from visualization.report_data import ReportSnapshot, report_link
-
-logger = get_logger(__name__)
+from scrapingstore.report.generator import ReportSource
+from scrapingstore.report.generator import generate_dashboard as _generate_dashboard
 
 
 def generate_dashboard(
-    db: Union[DatabaseManager, ReportSnapshot],
+    source: ReportSource,
     output_path: Optional[str] = None,
-    *,
     terminal_path: Optional[str] = None,
+    **kwargs,
 ) -> str:
-    """Generate the modern dashboard from a shared snapshot or a database."""
-    logger.info("Generating dashboard...")
-    if isinstance(db, ReportSnapshot):
-        snapshot = db
-    else:
-        products, run = db.get_catalog_snapshot()
-        snapshot = ReportSnapshot.from_products(products, run=run)
-    destination = Path(output_path) if output_path else DASHBOARD_HTML_PATH
-    sibling = (
-        Path(terminal_path)
-        if terminal_path
-        else destination.with_name("dashboard_terminal.html")
-    )
-    env = Environment(
-        loader=FileSystemLoader(str(TEMPLATES_DIR)),
-        keep_trailing_newline=True,
-    )
-    template = env.get_template("dashboard_modern_template.html")
-    html_content = template.render(
-        **snapshot.context, terminal_href=report_link(destination, sibling)
-    )
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(html_content, encoding="utf-8")
-    logger.info(f"Dashboard saved to {destination}")
-    return str(destination)
+    """Write the HTML report. ``terminal_path`` is accepted for 2.x callers and ignored."""
+    if terminal_path is not None:
+        warnings.warn(
+            "terminal_path is ignored: ScrapingStore 3 writes a single report.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    return _generate_dashboard(source, output_path, **kwargs)
+
+
+__all__ = ["generate_dashboard"]

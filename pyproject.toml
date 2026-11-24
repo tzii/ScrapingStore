@@ -4,57 +4,60 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scrapingstore"
-version = "2.0.1"
-description = "A complete end-to-end data engineering portfolio project demonstrating web scraping, data cleaning, visualization, and Power BI integration."
+version = "3.0.0"
+description = "Collect product prices and stock across repeated runs, keep every run in SQLite, and build an offline HTML report of what changed."
 authors = [
     {name = "Simone"},
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "MIT"
 dependencies = [
-    "requests",
-    "beautifulsoup4",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
     "playwright==1.60.0",
-    "pandas>=2.0,<3.0",
-    "jinja2>=3.1",
+    "jinja2>=3.1.0",
     "sqlmodel>=0.0.14",
     "pydantic>=2.0",
-    "typer",
-    "rich",
-    "python-dotenv",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.scripts]
-scrapingstore = "main:app"
+scrapingstore = "scrapingstore.cli.app:app"
 
 [project.optional-dependencies]
+pandas = [
+    "pandas>=2.0,<3.0",
+]
 dev = [
-    "pytest",
+    "pytest>=8.0",
     "pytest-cov",
-    "black",
-    "flake8",
-    "mypy",
+    "hypothesis>=6.100",
+    "ruff>=0.8.0",
+    "mypy>=1.10",
     "pre-commit",
     "types-requests",
     "types-beautifulsoup4",
+    "pandas>=2.0,<3.0",
 ]
 
 [tool.setuptools.packages.find]
-include = ["scraper*", "cleaning*", "visualization*"]
-exclude = ["data*", "assets*", "tests*", "docs*"]
-
-[tool.setuptools]
-py-modules = ["models", "database", "config", "logger", "main", "comparison"]
+include = ["scrapingstore*"]
+exclude = ["data*", "assets*", "tests*", "docs*", "scripts*"]
 
 [tool.setuptools.package-data]
-visualization = ["templates/*.html"]
+"scrapingstore.report" = ["templates/*.html"]
 
-[tool.isort]
-profile = "black"
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = ["data", "docs", ".venv", "node_modules", "build", "dist"]
 
-[tool.black]
-target-version = ["py39"]
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B"]
+ignore = ["E501", "B008"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -69,14 +72,4 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = [
-    "cleaning",
-    "scraper",
-    "visualization",
-    "config",
-    "database",
-    "logger",
-    "main",
-    "models",
-    "comparison",
-]
+source = ["scrapingstore"]

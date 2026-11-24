@@ -1,97 +1,75 @@
-"""Capture README images from the archived demo, without collecting new data.
+"""Capture the README screenshots from the offline report in docs/ (no network needed).
 
-Run ``python -m scripts.refresh_demo`` first if templates have changed, then
-``python -m scripts.capture_readme``. Requires Playwright Chromium and internet
-access for the demo's web fonts and CDN libraries.
+Run from repository root after `python -m scripts.refresh_demo`:
+    python -m scripts.capture_readme
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 
-from playwright.sync_api import expect, sync_playwright
+from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
+REPORT = (ROOT / "docs/index.html").as_uri()
 
 
-def run():
+def _bottom(page, selector: str) -> float:
+    box = page.locator(selector).bounding_box()
+    return box["y"] + box["height"]
+
+
+def run() -> None:
+    errors: list[str] = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        context = browser.new_context(
-            viewport={"width": 1440, "height": 1400},
-            device_scale_factor=1,
-            color_scheme="dark",
-            reduced_motion="reduce",
-            locale="en-GB",
-            timezone_id="UTC",
-        )
-        page = context.new_page()
-        errors = []
-        page.on("pageerror", lambda error: errors.append(str(error)))
-        page.on(
-            "requestfailed",
-            lambda request: errors.append(f"{request.url}: {request.failure}"),
-        )
         try:
-            page.goto((ROOT / "docs/index.html").as_uri(), wait_until="networkidle")
-            page.evaluate("document.fonts.ready")
-            page.wait_for_function(
-                "typeof Chart !== 'undefined' && Chart.getChart('priceChart')"
-                " && Chart.getChart('availChart')"
-            )
-            expect(page.locator("#grid-table tbody tr")).to_have_count(12)
-            expect(page.locator("[x-show='showSplash']")).to_be_hidden()
-            expect(page.locator("#kpi-total")).to_have_text("3000")
-            # Include the complete freshness panel below the charts.
-            freshness = page.locator("#freshness").bounding_box()
-            page.set_viewport_size(
-                {
-                    "width": 1440,
-                    "height": round(freshness["y"] + freshness["height"] + 24),
-                }
-            )
-            page.screenshot(
-                path=str(ASSETS / "dashboard_modern.png"), animations="disabled"
-            )
+            for scheme in ("light", "dark"):
+                context = browser.new_context(
+                    viewport={"width": 1280, "height": 900},
+                    color_scheme=scheme,
+                    reduced_motion="reduce",
+                    locale="en-GB",
+                    timezone_id="UTC",
+                )
+                page = context.new_page()
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(REPORT, wait_until="load")
+                page.wait_for_selector("#grid tbody tr")
 
-            page.get_by_label("Search catalog").fill("Mario")
-            page.get_by_label("Filter by availability").select_option("In Stock")
-            page.get_by_label("Minimum price").fill("50")
-            page.get_by_label("Maximum price").fill("90")
-            expect(page.locator("#grid-table tbody tr")).to_have_count(12)
-            expect(page.locator("#grid-table tbody tr").first).to_contain_text("Mario")
-            expect(page.locator("#grid-table tbody")).to_contain_text(
-                "Observed over 7 days ago"
-            )
-            page.locator("#catalog").screenshot(
-                path=str(ASSETS / "dashboard_catalog.jpg"),
-                type="jpeg",
-                quality=90,
-                animations="disabled",
-            )
-
-            page.set_viewport_size({"width": 1440, "height": 1000})
-            page.goto(
-                (ROOT / "docs/dashboard_terminal.html").as_uri(),
-                wait_until="networkidle",
-            )
-            page.evaluate("document.fonts.ready")
-            expect(page.locator("#t-count")).to_have_text("3000")
-            expect(page.locator("#log-feed")).to_contain_text(
-                "Observed over 7 days ago"
-            )
-            expect(page.locator("#term-output")).to_contain_text("Outcome not captured")
-            page.wait_for_function(
-                "document.getElementById('nav-clock').textContent !== '--:--:--'"
-            )
-            page.screenshot(
-                path=str(ASSETS / "dashboard_terminal.png"), animations="disabled"
-            )
-            if errors:
-                raise RuntimeError("Dashboard JavaScript errors: " + "; ".join(errors))
+                if scheme == "light":
+                    # Headline, controls and the first rows of the run grid.
+                    page.screenshot(
+                        path=str(ASSETS / "report.png"),
+                        clip={"x": 0, "y": 0, "width": 1280, "height": 1000},
+                        full_page=True,
+                    )
+                    # The headline numbers filter the grid.
+                    page.locator('#lede button[data-ev="drop"]').click()
+                    page.screenshot(
+                        path=str(ASSETS / "report_dropped.png"),
+                        clip={"x": 0, "y": 0, "width": 1280, "height": _bottom(page, "#grid") + 24},
+                        full_page=True,
+                    )
+                else:
+                    lower = page.locator("#lower").bounding_box()
+                    page.screenshot(
+                        path=str(ASSETS / "report_dark.png"),
+                        clip={
+                            "x": 0,
+                            "y": lower["y"] - 24,
+                            "width": 1280,
+                            "height": lower["height"] + 48,
+                        },
+                        full_page=True,
+                    )
+                context.close()
         finally:
-            context.close()
             browser.close()
-    print("Captured modern overview, filtered catalog and terminal screenshots.")
+    if errors:
+        raise RuntimeError("Report JavaScript errors: " + "; ".join(errors))
+    print("Captured report.png, report_dropped.png and report_dark.png in assets/.")
 
 
 if __name__ == "__main__":

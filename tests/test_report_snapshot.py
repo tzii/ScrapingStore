@@ -1,18 +1,18 @@
-"""Regressions for catalog scope, statistics and report navigation."""
+"""Regressions for catalog scope, statistics, and the embedded report data."""
 
 import csv
 import json
 from unittest.mock import patch
-from urllib.parse import unquote
 
-from bs4 import BeautifulSoup
 import pytest
+from bs4 import BeautifulSoup
 from typer.testing import CliRunner
 
-from main import app, _generate_pipeline_dashboards
-from models import Product
-from scraper.results import PageResult, ScrapeRunResult
-from visualization.report_data import ReportSnapshot
+from scrapingstore.cli.app import _generate_pipeline_dashboard, app
+from scrapingstore.ledger.models import Product
+from scrapingstore.report.columnar import decode_columnar
+from scrapingstore.report.snapshot import ReportSnapshot
+from scrapingstore.sources.results import PageResult, ScrapeRunResult
 
 
 def embedded(html, element_id):
@@ -55,60 +55,55 @@ def test_histogram_boundaries_count_each_product_once():
     chart = ReportSnapshot.from_products(products).context["chart_data"]
     assert chart["counts"] == [1, 1, 1, 1, 1, 1, 1, 2]
     assert chart["labels"][-1] == "35-40"
+    assert chart["interval_labels"][0] == "[0,5)"
+    assert chart["interval_labels"][-1] == "[35,40]"
 
 
 @pytest.mark.parametrize(
-    "modern_name, terminal_name",
-    [
-        ("data/dashboard.html", "data/dashboard_terminal.html"),
-        ("docs/index.html", "docs/dashboard_terminal.html"),
-        ("custom reports/catalog #1.html", "other reports/terminal & view.html"),
-    ],
+    "report_name",
+    ["data/dashboard.html", "docs/index.html", "custom reports/catalog #1.html"],
 )
-def test_reports_share_data_and_resolve_sibling_links(
-    tmp_path, db_manager, sample_products, modern_name, terminal_name
+def test_pipeline_report_reads_the_catalog_once(
+    tmp_path, db_manager, sample_products, report_name
 ):
     db_manager.save_products(sample_products)
-    modern = tmp_path / modern_name
-    terminal = tmp_path / terminal_name
+    report = tmp_path / report_name
     with patch.object(
         db_manager, "get_catalog_snapshot", wraps=db_manager.get_catalog_snapshot
     ) as read:
-        _generate_pipeline_dashboards(db_manager, str(modern), str(terminal))
+        assert _generate_pipeline_dashboard(db_manager, str(report)) == str(report)
         read.assert_called_once_with()
-    for key in ("products-data", "statistics-data", "chart-data", "report-metadata"):
-        assert embedded(modern.read_text(encoding="utf-8"), key) == embedded(
-            terminal.read_text(encoding="utf-8"), key
-        )
-    for origin, destination in ((modern, terminal), (terminal, modern)):
-        links = BeautifulSoup(
-            origin.read_text(encoding="utf-8"), "html.parser"
-        ).find_all("a", href=True)
-        assert any(
-            (origin.parent / unquote(link["href"])).resolve() == destination.resolve()
-            for link in links
-        )
+    html = report.read_text(encoding="utf-8")
+    for key in (
+        "timeline-data",
+        "columnar-data",
+        "statistics-data",
+        "report-metadata",
+        "smells-data",
+        "restock-data",
+    ):
+        assert BeautifulSoup(html, "html.parser").find(id=key) is not None
+    names = {row["name"] for row in embedded(html, "timeline-data")["rows"]}
+    assert names == {p.name for p in sample_products}
 
 
 @pytest.mark.parametrize("empty_run", [False, True])
 def test_cli_reports_persisted_catalog_across_repeated_runs(
-    tmp_path, db_manager, empty_run
+    tmp_path, db_manager, empty_run, monkeypatch
 ):
-    """An old stored product survives a new or empty run in both reports."""
+    """An old stored product survives a new or empty run in the report."""
+    monkeypatch.setenv("SCRAPINGSTORE_HOME", str(tmp_path))
+    monkeypatch.delenv("DATA_DIR", raising=False)
     db_manager.save_products(
         [Product(name="Existing", price=10, source_url="https://example.test")]
     )
-    modern = tmp_path / "dashboard.html"
-    terminal = tmp_path / "dashboard_terminal.html"
-    csv_path = tmp_path / "catalog.csv"
+    report = tmp_path / "data" / "dashboard.html"
+    csv_path = tmp_path / "data" / "products_powerbi.csv"
     export = db_manager.export_for_powerbi
     with (
-        patch("main.DatabaseManager", return_value=db_manager),
+        patch("scrapingstore.cli.app.DatabaseManager", return_value=db_manager),
         patch.object(db_manager, "close"),
-        patch("main.DATA_DIR", tmp_path),
-        patch("main.BrowserScraper") as browser,
-        patch("main.DASHBOARD_HTML_PATH", modern),
-        patch("main.TERMINAL_DASHBOARD_HTML_PATH", terminal),
+        patch("scrapingstore.cli.app.AutoScraper") as auto_scraper,
         patch.object(
             db_manager, "export_for_powerbi", side_effect=lambda: export(str(csv_path))
         ),
@@ -131,7 +126,7 @@ def test_cli_reports_persisted_catalog_across_repeated_runs(
             return ScrapeRunResult(
                 "https://example.test",
                 1,
-                "browser",
+                "static",
                 pages=[
                     PageResult(
                         1,
@@ -142,14 +137,13 @@ def test_cli_reports_persisted_catalog_across_repeated_runs(
                 ],
             ).finish("page_limit")
 
-        browser.return_value.scrape.side_effect = collection
+        auto_scraper.return_value.scrape.side_effect = collection
         for _ in range(2):
             result = CliRunner().invoke(app, ["scrape", "--pages", "1"])
             assert result.exit_code == 0, result.output
     expected = {"Existing"} if empty_run else {"Existing", "New free product"}
-    for path in (modern, terminal):
-        products = embedded(path.read_text(encoding="utf-8"), "products-data")
-        assert {p["name"] for p in products} == expected
-        assert len(products) == len(expected)
+    products = decode_columnar(embedded(report.read_text(encoding="utf-8"), "columnar-data"))
+    assert {p["name"] for p in products} == expected
+    assert len(products) == len(expected)
     with csv_path.open(encoding="utf-8-sig", newline="") as stream:
         assert {row["name"] for row in csv.DictReader(stream)} == expected

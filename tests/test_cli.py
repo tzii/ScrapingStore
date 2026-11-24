@@ -1,22 +1,14 @@
-"""
-Tests for the CLI commands.
-"""
+"""Tests for the ScrapingStore CLI commands."""
 
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
 
-from config import (
-    BASE_URL,
-    DASHBOARD_HTML_PATH,
-    TERMINAL_DASHBOARD_HTML_PATH,
-    DOCS_DASHBOARD_HTML_PATH,
-    DOCS_TERMINAL_DASHBOARD_HTML_PATH,
-)
-from main import app
-from scraper.results import PageResult, ScrapeRunResult
+from scrapingstore.cli.app import app
+from scrapingstore.config import get_settings
+from scrapingstore.sources.results import PageResult, ScrapeRunResult
 
 runner = CliRunner()
 
@@ -27,52 +19,58 @@ def test_no_args_shows_help():
     assert result.exit_code == 0
     assert "Usage" in result.stdout
     assert "scrape" in result.stdout
+    assert "demo" in result.stdout
 
 
-@patch("main.DatabaseManager")
-@patch("main.BrowserScraper")
-@patch("main.clean_products")
-@patch("main.generate_dashboard")
-@patch("main.generate_terminal_dashboard")
-def test_scrape_command_default(
-    mock_terminal, mock_dashboard, mock_clean, mock_scraper_cls, mock_db_cls
+@patch("scrapingstore.cli.app.DatabaseManager")
+@patch("scrapingstore.cli.app.AutoScraper")
+@patch("scrapingstore.cli.app.clean_products")
+@patch("scrapingstore.cli.app.generate_dashboard")
+def test_scrape_command_default_uses_auto(
+    mock_dashboard, mock_clean, mock_scraper_cls, mock_db_cls
 ):
-    """Test the scrape command runs with defaults."""
+    """Default scrape uses AutoScraper (HTTP first with browser fallback)."""
+    settings = get_settings()
     mock_scraper = MagicMock()
     mock_scraper.scrape.return_value = ScrapeRunResult(
-        BASE_URL,
+        settings.base_url,
         1,
-        "browser",
-        pages=[PageResult(1, BASE_URL, status="empty", source_end=True)],
+        "static",
+        pages=[PageResult(1, settings.base_url, status="empty", source_end=True)],
     ).finish("source_end")
     mock_scraper_cls.return_value = mock_scraper
-
     mock_clean.return_value = []
-
     mock_db = MagicMock()
+    mock_db.list_runs.return_value = []
     mock_db_cls.return_value = mock_db
 
     result = runner.invoke(app, ["scrape", "--pages", "1", "--no-dashboard"])
-    assert result.exit_code == 0
-    mock_scraper_cls.assert_called_once_with(base_url=BASE_URL, delay=1.0)
+    assert result.exit_code == 0, result.output
+    assert mock_scraper_cls.call_count == 1
+    assert mock_scraper_cls.call_args.kwargs["base_url"] == settings.base_url
+    assert mock_scraper_cls.call_args.kwargs["delay"] == 1.0
     mock_scraper.scrape.assert_called_once_with(max_pages=1)
 
 
-@pytest.mark.parametrize("scraper_type", ["static", "browser"])
+@pytest.mark.parametrize("scraper_type", ["static", "browser", "auto"])
 def test_explicit_scraper_selection(scraper_type):
+    settings = get_settings()
     with (
-        patch("main.DatabaseManager"),
-        patch("main.StaticScraper") as static,
-        patch("main.BrowserScraper") as browser,
+        patch("scrapingstore.cli.app.DatabaseManager") as db_cls,
+        patch("scrapingstore.cli.app.StaticScraper") as static,
+        patch("scrapingstore.cli.app.BrowserScraper") as browser,
+        patch("scrapingstore.cli.app.AutoScraper") as auto,
     ):
+        db_cls.return_value.list_runs.return_value = []
         result_data = ScrapeRunResult(
-            BASE_URL,
+            settings.base_url,
             2,
             scraper_type,
-            pages=[PageResult(1, BASE_URL, status="empty", source_end=True)],
+            pages=[PageResult(1, settings.base_url, status="empty", source_end=True)],
         ).finish("source_end")
         static.return_value.scrape.return_value = result_data
         browser.return_value.scrape.return_value = result_data
+        auto.return_value.scrape.return_value = result_data
         result = runner.invoke(
             app,
             [
@@ -85,15 +83,15 @@ def test_explicit_scraper_selection(scraper_type):
                 "--no-export",
             ],
         )
-        assert result.exit_code == 0
-        selected, other = (
-            (static, browser) if scraper_type == "static" else (browser, static)
-        )
-        selected.return_value.scrape.assert_called_once_with(max_pages=2)
-        other.assert_not_called()
+        assert result.exit_code == 0, result.output
+        mapping = {"static": static, "browser": browser, "auto": auto}
+        mapping[scraper_type].return_value.scrape.assert_called_once_with(max_pages=2)
+        for key, mock_cls in mapping.items():
+            if key != scraper_type:
+                mock_cls.assert_not_called()
 
 
-@patch("main.DatabaseManager")
+@patch("scrapingstore.cli.app.DatabaseManager")
 def test_export_command(mock_db_cls):
     """Test the export command calls export_for_powerbi."""
     mock_db = MagicMock()
@@ -105,13 +103,14 @@ def test_export_command(mock_db_cls):
     mock_db.export_for_powerbi.assert_called_once()
 
 
-@patch("main.generate_terminal_dashboard")
-@patch("main.generate_dashboard")
-@patch("main.DatabaseManager")
-def test_generate_report_command(mock_db_cls, mock_dashboard, mock_terminal):
+@patch("scrapingstore.cli.app.generate_dashboard")
+@patch("scrapingstore.cli.app.DatabaseManager")
+def test_generate_report_command(mock_db_cls, mock_dashboard):
     """Test the generate-report command."""
+    settings = get_settings()
     mock_db = MagicMock()
     mock_db.get_catalog_snapshot.return_value = ([], None)
+    mock_db.get_multi_run_history.return_value = []
     mock_db_cls.return_value = mock_db
 
     result = runner.invoke(app, ["generate-report"])
@@ -121,32 +120,23 @@ def test_generate_report_command(mock_db_cls, mock_dashboard, mock_terminal):
     snapshot = mock_dashboard.call_args.args[0]
     assert snapshot.context["products"] == []
     mock_dashboard.assert_called_once_with(
-        snapshot,
-        output_path=str(DASHBOARD_HTML_PATH),
-        terminal_path=str(TERMINAL_DASHBOARD_HTML_PATH),
-    )
-    mock_terminal.assert_called_once_with(
-        snapshot,
-        output_path=str(TERMINAL_DASHBOARD_HTML_PATH),
-        dashboard_path=str(DASHBOARD_HTML_PATH),
+        snapshot, output_path=str(settings.dashboard_html_path)
     )
 
 
-@patch("main.generate_terminal_dashboard")
-@patch("main.generate_dashboard")
-@patch("main.DatabaseManager")
-def test_generate_report_docs_paths(mock_db_cls, mock_dashboard, mock_terminal):
-    """The docs flag should target the GitHub Pages files."""
+@patch("scrapingstore.cli.app.generate_dashboard")
+@patch("scrapingstore.cli.app.DatabaseManager")
+def test_generate_report_docs_paths(mock_db_cls, mock_dashboard):
+    """The docs flag should target the GitHub Pages file."""
+    settings = get_settings()
     mock_db = MagicMock()
     mock_db.get_catalog_snapshot.return_value = ([], None)
+    mock_db.get_multi_run_history.return_value = []
     mock_db_cls.return_value = mock_db
 
     result = runner.invoke(app, ["generate-report", "--docs"])
 
     assert result.exit_code == 0
     assert Path(mock_dashboard.call_args.kwargs["output_path"]) == (
-        DOCS_DASHBOARD_HTML_PATH
-    )
-    assert Path(mock_terminal.call_args.kwargs["output_path"]) == (
-        DOCS_TERMINAL_DASHBOARD_HTML_PATH
+        settings.docs_dashboard_html_path
     )

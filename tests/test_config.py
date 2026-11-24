@@ -2,7 +2,7 @@
 Tests for configuration helpers.
 """
 
-from config import _env_int, _env_float
+from config import _env_float, _env_int
 
 
 def test_env_int_returns_default_when_unset(monkeypatch):

@@ -1,10 +1,11 @@
 -r requirements.txt
 
-pytest
+pytest>=8.0
 pytest-cov
-black
-flake8
-mypy
+hypothesis>=6.100
+ruff>=0.8.0
+mypy>=1.10
 pre-commit
 types-requests
 types-beautifulsoup4
+pandas>=2.0,<3.0

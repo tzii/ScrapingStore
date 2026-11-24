@@ -305,8 +305,8 @@ def test_list_runs_is_bounded_newest_first_and_uses_utc_instants(db_manager):
 def test_existing_database_gets_additive_history_without_fabricated_snapshots(tmp_path):
     db = DatabaseManager(f"sqlite:///{tmp_path / 'pre-history.db'}")
     try:
-        getattr(Product, "__table__").create(db.engine)
-        getattr(CollectionRun, "__table__").create(db.engine)
+        Product.__table__.create(db.engine)
+        CollectionRun.__table__.create(db.engine)
         db.save_products([product()])
         db.save_run(manifest("legacy"))
         with db.engine.connect() as connection:

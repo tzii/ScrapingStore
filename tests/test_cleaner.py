@@ -2,8 +2,8 @@
 Tests for the data cleaning pipeline.
 """
 
-from models import Product
 from cleaning.data_cleaner import clean_products
+from models import Product
 
 
 def test_clean_preserves_valid_data():

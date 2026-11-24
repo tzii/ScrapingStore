@@ -1,19 +1,21 @@
-# Match the Python package version in requirements.txt so browser binaries
+# Match the Python package version in pyproject.toml so browser binaries
 # and the Playwright client stay compatible.
 FROM mcr.microsoft.com/playwright/python:v1.60.0-noble
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
-RUN python -m pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml README.md LICENSE CHANGELOG.md MANIFEST.in ./
+COPY scrapingstore ./scrapingstore
 
-# Copy application code
-COPY . .
+RUN python -m pip install --no-cache-dir . \
+    && useradd --create-home --shell /usr/sbin/nologin scraper \
+    && mkdir -p /app/data /app/docs \
+    && chown -R scraper:scraper /app
 
-# Set environment variables
+USER scraper
+
 ENV PYTHONUNBUFFERED=1
+ENV SCRAPINGSTORE_HOME=/app
 
-# Entrypoint to run the scraper by default
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["scrapingstore"]
 CMD ["scrape"]

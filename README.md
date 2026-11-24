@@ -2,57 +2,73 @@
 
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Pandas](https://img.shields.io/badge/Pandas-Data%20Analysis-150458?logo=pandas)
-![Chart.js](https://img.shields.io/badge/Chart.js-Visualization-FF6384?logo=chartdotjs)
+![Version](https://img.shields.io/badge/Version-3.0.0-d4a843)
 
-A product observation pipeline with a searchable dashboard, immutable collection history, and evidence-aware change reports. Built with Python, Playwright, SQLModel and SQLite; exports CSV for Power BI.
+**Collect product prices and stock from online stores, keep every run, and see what changed.**
 
-Version **2.0.1** adds saved-run comparisons and visible observation freshness. [Release and migration notes](RELEASE.md) explain the library API changes and legacy database upgrade.
+ScrapingStore saves each collection as a separate run in SQLite, together with the raw HTML of every page. A price it can't read is stored as unknown, never as zero. A product that isn't seen in a run is reported as not seen, never as sold out. When a run reads far fewer prices than usual, it is marked `degraded` and isn't published unless you ask for it. You can `diff` two runs, `blame` a product's fields, and `reparse` old runs with a newer parser.
 
-### **[Snapshot Demo](https://tzii.github.io/ScrapingStore/)** | **[Terminal View](https://tzii.github.io/ScrapingStore/dashboard_terminal.html)**
+**[Demo report](https://tzii.github.io/ScrapingStore/)**: five weekly runs of a simulated store, built with `scrapingstore demo`.
 
-The demo preserves 3,000 archived observations from December 2025. It demonstrates the interface, not current market prices or stock. Both themes show how old that data is.
-
-## Dashboard Previews
-
-### Modern analytics
-
-Price distribution, high-price outliers, availability and observation freshness in one view. Switch between dark and light themes in the [interactive demo](https://tzii.github.io/ScrapingStore/).
-
-![Current modern dashboard in dark mode, showing catalog statistics, price and availability charts, and observation freshness](assets/dashboard_modern.png)
+![The demo report: a sentence summarising the latest run, charts of typical price change, price changes and stock per run, then one row per product and one column per run](assets/report.png)
 
 <details>
-<summary><strong>Explore the catalog: search, filters and CSV export</strong></summary>
+<summary><strong>Each number in the summary filters the table</strong></summary>
 
-Search by product name, price or availability; combine stock and price filters; export every matching row across all pages. Each row shows when the product was observed and how old that evidence is.
-
-![Current product catalog filtered to Mario titles last observed in stock, with price bounds, collection timestamps, freshness labels and CSV export](assets/dashboard_catalog.jpg)
+![The report filtered to the six products whose price dropped in the latest run](assets/report_dropped.png)
 
 </details>
 
 <details>
-<summary><strong>Explore the terminal dashboard</strong></summary>
+<summary><strong>Prices by category, restock times and notes, dark theme</strong></summary>
 
-The [terminal view](https://tzii.github.io/ScrapingStore/dashboard_terminal.html) presents the same snapshot with an ASCII price histogram, summary statistics, keyword counts and an observation replay.
-
-![Current terminal dashboard with observation freshness, ASCII price distribution, outlier details and archived observation replay](assets/dashboard_terminal.png)
+![Current prices as dots grouped by category, next to a histogram of how long products stayed sold out and notes about a degraded run and products no longer seen](assets/report_dark.png)
 
 </details>
-
-Screenshots show the archived demo: **3,000 observations collected on 11 December 2025**. Availability is the last observed signal; freshness is assessed when the report is generated.
 
 ---
 
-## Features
+## What it does
 
-| Category | Technologies & Techniques |
-|----------|---------------------------|
-| **Web Scraping** | Playwright (headless browser), BeautifulSoup, async/await, pagination handling |
-| **Data Cleaning** | Normalization, missing-value provenance, source identity deduplication |
-| **Visualization** | Chart.js, Grid.js, Alpine.js, Jinja2 HTML dashboards (modern + terminal) |
-| **Database & History** | SQLModel, SQLite, atomic upserts, immutable run observations, saved-run comparisons |
-| **Data Export** | Power BI-ready CSV (UTF-8 BOM), automated pipeline |
-| **DevOps** | Docker, GitHub Actions, GitLab CI, pre-commit hooks, pytest |
+- **A one-page HTML report** that opens offline, with no external scripts, styles or fonts. The first sentence says what changed in the latest run, and each number in it filters the table. Under it, three charts show how much a typical price has moved since the first run, how many prices dropped or rose in each run, and how much was in stock. The table has one row per product and one column per run, showing price drops ▼, rises ▲, sold-out stretches and unreadable prices. Below it are current prices by category, a histogram of how long products stayed sold out, and notes on degraded runs and products that stopped appearing. Download CSV exports the rows you filtered.
+- **Careful comparisons.** The summary only compares the last two runs, and only products with a stable ID, the same way `diff` does. If a price changed across a run that couldn't read it, the report marks it ▽ or △ instead of guessing which run it changed in.
+- **Data checks (`smells`).** Flags placeholder images, stock that alternates by position, prices that all end in `.99`, identical timestamps, missing product IDs, and a shifted price distribution compared with the last complete run.
+- **A CLI built around runs:** `scrape` (`collect`), `runs` (`log`), `inspect-run` (`show`), `diff`, `blame`, `reparse`, `smells`, `doctor`, `demo`, `generate-report` (`report`), `export`, `serve` and `tui`. Runs can be named by short ID, `@latest` or `@prev`.
+- **Adapters and transports.** Oxylabs sandbox, Schema.org JSON-LD, TOML recipes and a seeded `MockMarket`, fetched over HTTP (with ETag), a Playwright browser, or replayed from the archive. `--type auto` tries HTTP first and falls back to the browser.
+
+---
+
+## Quick start (no network needed)
+
+```bash
+git clone https://github.com/tzii/ScrapingStore.git
+cd ScrapingStore
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install .
+
+# 1. Build the demo report from a simulated store (no network or browser)
+scrapingstore demo --open
+
+# 2. Or collect real pages (HTTP first, Playwright only if needed)
+scrapingstore scrape --pages 5
+
+# 3. Look at the saved runs
+scrapingstore runs
+scrapingstore diff @prev @latest
+scrapingstore blame "Super Mario"
+scrapingstore smells
+scrapingstore reparse @latest
+scrapingstore doctor
+scrapingstore serve --open
+```
+
+For storefronts that need JavaScript, install Chromium for Playwright:
+
+```bash
+playwright install chromium
+scrapingstore scrape --type browser --pages 5
+```
 
 ---
 
@@ -60,359 +76,25 @@ Screenshots show the archived demo: **3,000 observations collected on 11 Decembe
 
 ```mermaid
 flowchart TD
-    CLI["CLI (main.py)"] --> Scraper["Scrapers: Playwright or Requests + BeautifulSoup"]
-    Scraper -->|Products and collection outcomes| Cleaner["Evidence-aware cleaning"]
-    Cleaner --> DB[("SQLite (SQLModel): catalog, runs and observations")]
-    DB -->|Current catalog or saved run| Snapshot["Shared report snapshot"]
-    Snapshot --> Modern["Modern HTML dashboard"]
-    Snapshot --> Terminal["Terminal HTML dashboard"]
-    DB -->|Current catalog| CSV["Power BI CSV + manifest"]
-    DB -->|Saved run pair| Compare["Change report (JSON)"]
-```
-
-Both dashboard themes use the same report snapshot. Collection outcomes control automatic report and CSV generation; saved runs can also be inspected, compared and rendered later.
-
----
-
-## Project Overview
-
-This project scrapes product data from the [Oxylabs Sandbox E-commerce](https://sandbox.oxylabs.io/products) website and processes it through a complete data pipeline:
-
-1. **Collect** - Scrape a page sample or the full source with Playwright or Requests, recording page outcomes and collection scope.
-2. **Clean** - Normalize names and availability, preserve unknown prices and deduplicate by source identity.
-3. **Store & Compare** - Update the SQLite catalog, retain immutable observations and compare saved runs.
-4. **Explore** - Generate modern and terminal dashboards with shared statistics, catalog search and observation freshness.
-5. **Export** - Produce Power BI-ready CSV files with collection provenance.
-
----
-
-## Project Structure
-
-```
-ScrapingStore/
-├── scraper/
-│   ├── __init__.py
-│   ├── base.py                     # Abstract base scraper class
-│   ├── product_scraper.py          # BeautifulSoup scraper (static HTML)
-│   └── product_scraper_browser.py  # Playwright scraper (JS-rendered pages)
-├── cleaning/
-│   ├── __init__.py
-│   └── data_cleaner.py             # Pandas data cleaning pipeline
-├── visualization/
-│   ├── __init__.py
-│   ├── dashboard_generator.py      # Modern dashboard (Tailwind/Chart.js)
-│   ├── terminal_dashboard_generator.py  # Retro terminal dashboard
-│   └── templates/                  # Jinja2 HTML templates
-├── tests/                          # pytest test suite
-│   ├── conftest.py                 # Shared fixtures
-│   ├── test_scraper.py
-│   ├── test_cleaner.py
-│   ├── test_database.py
-│   ├── test_models.py
-│   └── test_cli.py
-├── data/                           # Output directory (gitignored)
-├── docs/                           # Archived demo for GitHub Pages
-├── assets/                         # Logo and current UI screenshots
-├── scripts/                        # Demo refresh, screenshot capture and wheel checks
-├── comparison.py                   # Evidence-aware saved-run comparisons
-├── config.py                       # Centralized configuration
-├── database.py                     # SQLModel database manager
-├── models.py                       # Pydantic/SQLModel data models with validation
-├── logger.py                       # Logging configuration (Rich)
-├── main.py                         # CLI pipeline orchestrator (Typer)
-├── requirements.txt
-├── requirements-dev.txt
-├── Dockerfile
-├── docker-compose.yml
-└── README.md
+    CLI["CLI, TUI and local server (scrapingstore/cli/)"] --> Transport["Transports: HTTP (ETag) · Browser · Archive replay"]
+    Transport --> Adapters["Adapters: Oxylabs · JSON-LD · TOML recipe · MockMarket"]
+    Adapters --> Quality["Quality gate and data checks (scrapingstore/quality/)"]
+    Quality --> Ledger[("SQLite: runs, pages, raw .html.gz, observations")]
+    Ledger --> Analytics["Analytics: exact price diffs, restock times, possibly delisted"]
+    Analytics --> Report["Single-file HTML report (scrapingstore/report/)"]
+    Ledger --> CSV["Formula-safe Power BI CSV"]
 ```
 
 ---
 
-## Quick Start
-
-### Prerequisites
-
-- Python 3.9 or higher
-- pip package manager
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/tzii/ScrapingStore.git
-cd ScrapingStore
-
-# Create virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install .
-
-# Install development tools instead
-pip install -r requirements-dev.txt
-
-# Install Playwright browsers
-playwright install chromium
-```
-
-### Running the Pipeline
-
-The browser scraper is the default, including in Docker, and supports JavaScript-rendered content. Install Chromium as shown above. The current sandbox also exposes product markup in its HTML; use `--type static` explicitly for server-rendered pages or fixtures.
-
-```bash
-# Quick test: scrape 2 pages with the browser (~64 products)
-python main.py scrape --type browser --pages 2
-
-# Default: scrape 10 pages (~320 products)
-python main.py scrape
-
-# Scrape all pages (~3000 products)
-python main.py scrape --all
-
-# Custom delay between requests (be respectful!)
-python main.py scrape --pages 10 --delay 2.0
-
-# Explicit browser selection (also the default)
-python main.py scrape --type browser --pages 5
-
-# Show available commands without starting a scrape
-python main.py
-```
-
-### Other Commands
-
-```bash
-# Export existing data to Power BI CSV
-python main.py export
-
-# Regenerate dashboards from existing data
-python main.py generate-report
-
-# Regenerate the GitHub Pages site in docs/
-python main.py generate-report --docs
-```
-
-### Configuration
-
-You can configure the scraper using a `.env` file (copy from `.env.example`):
-
-```bash
-BASE_URL="https://sandbox.oxylabs.io/products"
-MAX_RETRIES=3
-DEFAULT_TIMEOUT=30
-DB_NAME="products.db"
-# Optional output locations (default: ./data and ./docs)
-SCRAPINGSTORE_HOME="/path/to/workspace"
-DATA_DIR="/path/to/data"
-DOCS_DIR="/path/to/docs"
-```
-
-### Report scope and catalog search
-
-Both reports describe the **current stored catalog**, selected once after persistence, including previously stored products. An empty scrape does not switch the report to a different dataset. The report-generation timestamp is shared by both views; it is not a collection timestamp or a guarantee that collection was complete.
-
-In the modern report, search (product name, formatted price or availability), availability and inclusive price bounds form one catalog query. The table and CSV export use that query. Export includes **all matching rows across all pages**. Reset clears the whole query. Summaries, charts and insights always describe the full stored catalog and are labelled accordingly.
-
-Both themes share price statistics and histogram bins. For datasets with at least eight known EUR prices, values above the upper quartile plus 1.5 times the interquartile range are shown separately as high-price outliers. The main histogram retains empty equal-width bands; outliers stay in headline statistics, search and exports. The highest five outliers are listed alongside their total count. Zero prices are included, an even median averages the two middle values, and the last histogram bin includes its upper boundary. Only usable EUR prices contribute to price summaries. Unknown prices remain blank in CSV and appear as “Price unavailable” in the catalog. With a price bound selected, records without a usable EUR price are excluded; without bounds they remain searchable and exportable.
-
-Navigation links follow the generated output paths: local `data/dashboard.html`, GitHub Pages `docs/index.html`, or configured output directories. Programmatic callers with custom filenames can pass `terminal_path` to `generate_dashboard` and `dashboard_path` to `generate_terminal_dashboard`.
-
-### Collection outcomes and publication
-
-Every collection returns a `ScrapeRunResult` containing products, per-page outcomes, errors, retry attempts, HTTP statuses, scope, UTC timestamps and the reason it stopped. The CLI persists the manifest in SQLite and `data/runs/<run-id>.json`.
-
-| Outcome | Meaning | CLI exit | Automatic CSV/reports |
-|---------|---------|----------|-----------------------|
-| `complete` | Requested scope processed successfully | 0 | Generated |
-| `empty` | Successful collection with no products | 0 | Reports generated; an empty catalog does not produce a CSV |
-| `partial` | Some useful pages, but failures, rejected cards, identity conflicts or a budget stop | 2 | Only with `--allow-partial` |
-| `failed` | No page processed successfully | 1 | Skipped |
-| `cancelled` | User interrupted collection | 130 | Skipped |
-
-Valid observations from partial collections are saved. `--allow-partial` keeps exit code 2 and the warning; it does not relabel the run complete. Existing report files remain untouched when automatic publication is skipped. Manual `generate-report` renders the stored catalog with the latest collection status, including failures. CSV exports include price status, source identity, last observed run and UTC collection time; an adjacent `.manifest.json` identifies the catalog scope and latest collection.
-
-```bash
-python main.py scrape --pages 5
-python main.py scrape --all --page-budget 200 --run-timeout 1800
-python main.py scrape --pages 5 --allow-partial
-```
-
-`complete` means complete for the requested scope, not necessarily the entire source. A two-page sample cannot establish that unseen products are unavailable. Historical catalog rows remain until explicitly managed.
-
-HTTP 429 and selected transient server/transport errors receive bounded retries, with `Retry-After` and a deadline. HTTP access denials and unrecognized layouts are failures, not empty pages. The adapter confirms an empty catalog using the source's explicit empty message, and recognizes a disabled Next link as the source end. Repeated pages, three consecutive failed pages, the page budget and the deadline stop collection. Speculative page requests beyond a confirmed source end remain in the manifest as `outside_scope`; they do not change the in-scope result or add products to it. Browser concurrency is three; `--delay` is a delay **between batches**, not a minimum spacing between individual requests.
-
-Library callers now use `scraper.scrape(...).products` and inspect `.status`/`.manifest()`. Inside an event loop, use `await browser_scraper.scrape_async(...)`; the synchronous wrapper does not block an existing loop. Caller-owned static scrapers and database managers expose `close()`; the CLI closes its resources.
-
-### Price evidence, identity and existing databases
-
-Both acquisition methods share the source adapter. Prices come from dedicated current-price elements, not the first euro amount in a card description. The EUR parser accepts two-decimal values with comma or dot decimals, grouped thousands, and a leading or trailing currency marker. Negative values, ambiguous multiple prices and unsupported formats retain their original text and a parsing status with `price = null`. A literal zero remains a known price. Numeric prices are still stored as floats; raw source text is retained.
-
-Availability comes from an explicit stock element or enabled purchase control. Contradictory signals produce `Unknown` with a reason. A missing or disabled control alone does not establish that a product is out of stock.
-
-Products use a source-native ID or a detail URL, preserving variant query parameters. SQLite enforces unique source keys and performs atomic upserts. A rename updates the same identity; equal names with different identities survive. Records without a stable identity receive a weak key and remain separate, including across runs. Their counts are reported in the manifest; they cannot support reliable change comparisons.
-
-When an older SQLite database is first opened, the application migrates its catalog in a transaction and keeps the original table as **`product_legacy_v1`**. Historical zero values become `legacy_unknown` with a null price because their original meaning cannot be recovered. Legacy rows retain their IDs and are not automatically matched to newly collected products by name; they can coexist with newly identified records. Back up the database before manual legacy reconciliation. The migration refuses to overwrite an existing backup table.
-
-### Saved runs and observation history
-
-New collections save their accepted product observations, run manifest, and catalog updates in one SQLite transaction. Each observation retains its collected time, identity, raw price and availability signals, parsing status, and parser version. Later price changes or renames update the current catalog without rewriting earlier observations. The catalog retains the newest observation by collected time, even if an older run finishes later. An exact retry does not change the catalog; different evidence submitted under an existing run ID is rejected. A rejected retry writes a separate attempt manifest without overwriting the original JSON sidecar.
-
-```bash
-# Find saved run IDs and their outcomes
-python main.py runs --limit 10
-
-# Inspect page outcomes, failures, scope, counts and stop reason
-python main.py inspect-run RUN_ID
-
-# Include the original product values and parsing evidence as JSON
-python main.py inspect-run RUN_ID --products
-
-# Compare the accepted observations in two saved runs
-scrapingstore compare-runs OLD_RUN_ID NEW_RUN_ID > comparison.json
-
-# Regenerate both dashboard themes from that run's accepted observations
-python main.py generate-report --run-id RUN_ID
-```
-
-The selected-run report uses the usual output paths and labels its scope and collection status. An empty saved run generates an empty report, even when the current catalog contains products. A partial run remains labelled partial. Report generation time is separate from each product's collection time. Without `--run-id`, reports continue to show the current stored catalog. Catalog reports and exports read product values and the latest-run metadata from one database snapshot, including during concurrent collections.
-
-History begins with collections saved by this version. Existing catalogs and manifest-only runs remain readable, but cannot be reconstructed as historical reports. The migration adds the history table without inventing past observations. Raw page archives remain future work. Missing a product in a run does not mark it unavailable.
-
-`compare-runs OLD NEW` emits JSON in the supplied direction. Stable source IDs or detail URLs match observations; weak and legacy identities are counted as excluded. Name, availability and price evidence changes include their old and new values. Price deltas use the same known currency on both sides; unknown prices and currency changes have null deltas. A known zero remains zero, and a change from zero has no percentage. `only_in_old` and `only_in_new` mean one-sided observations, never product removal, introduction or stock transitions. Run manifests and warnings retain partial outcomes and differing scopes. Missing or manifest-only runs fail clearly; an empty archived run is valid.
-
-### Observation freshness
-
-Both themes count observations within seven days, over seven days old, and without a recorded time. Future timestamps are flagged separately. Ages are calculated in UTC **at report generation**, including when replaying a historical run; they do not keep ticking in the saved HTML. The modern catalog shows each observation time and freshness label, and its CSV includes `freshness` and `observed_age_days`. These indicators never change the last observed availability. Regenerate the report to update its age assessment.
-
-To refresh the archived showcase with the current templates while preserving its collection times, run `python -m scripts.refresh_demo` from the repository root. To replace it with a newly collected catalog, use `scrapingstore generate-report --docs` after a successful collection.
-
-To update the README screenshots after changing the UI, install Playwright Chromium and run:
-
-```bash
-python -m scripts.refresh_demo
-python -m scripts.capture_readme
-```
-
-The capture script opens the checked-in demo in Chromium, waits for fonts, charts and catalog rows, and captures the overview, a filtered catalog and the terminal view. Internet access is required for the demo's CDN libraries and web fonts.
-
-The browser collector enforces a wall-clock collection deadline. Static Requests timeouts bound socket inactivity: a slowly streaming response may return after the configured run deadline. Its evidence is retained and the run is marked incomplete rather than reported as successful completion.
-
-### Running Tests
-
-```bash
-pytest
-
-# With coverage report
-pytest --cov=scraper --cov=cleaning --cov=visualization --cov-report=term-missing
-```
-
-Browser regressions require Node.js/npm and Playwright Chromium:
-
-```bash
-pip install -r requirements-dev.txt
-npm ci --ignore-scripts
-python -m playwright install chromium
-pytest --run-browser
-```
-
-The browser tests serve pinned Alpine.js, Grid.js and Chart.js dependencies locally, intercept external requests, and test the generated reports with fixture data. They cover combined search/filter/export, pagination, reset, empty results, zero prices, hostile-looking text and navigation in both directions. These are behavior tests; the Tailwind CDN styling is not exercised. CI installs Chromium and runs them explicitly; plain `pytest` skips browser tests.
-
----
-
-## Output Files
-
-| File | Description |
-|------|-------------|
-| `data/products_powerbi.csv` | Power BI-ready export (UTF-8 BOM) |
-| `data/dashboard.html` | Interactive modern dashboard |
-| `data/dashboard_terminal.html` | Terminal-style dashboard |
-| `docs/index.html` | GitHub Pages modern dashboard (`--docs`) |
-| `docs/dashboard_terminal.html` | GitHub Pages terminal dashboard (`--docs`) |
-
----
-
-## Module Details
-
-### Web Scraper (`scraper/`)
-
-- **Two scraper implementations**: Static (BeautifulSoup) and Browser (Playwright)
-- Structured data extraction (price, availability, images) at scrape time
-- Async/await with concurrency limiting (semaphore) for browser scraper
-- Rate limiting and configurable delay between requests
-- Pagination with confirmed end signals and hard budgets
-- Bounded retries, page outcomes and explicit stop reasons for both scrapers
-
-### Data Cleaner (`cleaning/data_cleaner.py`)
-
-- Availability normalization with explicit unknown/conflicting states
-- Deduplication by source identity, with conflicting observations reported
-- Name whitespace trimming and preservation of missing prices and raw evidence
-
-### Visualization (`visualization/`)
-
-- **Modern Dashboard**: Tailwind CSS glass UI with aurora backdrop, Chart.js (price histogram, availability doughnut), Grid.js table with search, sorting, availability/price-range filters and client-side CSV export, top-10 price leaderboard, animated KPI counters, Alpine.js dark/light mode (system-aware, persisted), reduced-motion and aria support
-- **Terminal Dashboard**: Retro CRT-style with ASCII bar charts, auto-calculated KPIs
-- Auto-detected franchise/keyword analysis (no hardcoded keywords)
-
-### Data Models (`models.py`)
-
-- SQLModel/Pydantic hybrid with model validation
-- Price must be finite and non-negative; name must not be empty
-- Automatic UTC timestamps on creation
-
-See the [dashboard previews](#dashboard-previews) for current screenshots of both views and the catalog controls.
-
----
-
-## Power BI Integration
-
-The `products_powerbi.csv` file is formatted for seamless Power BI import:
-
-1. Open Power BI Desktop
-2. Click **Get Data** → **Text/CSV**
-3. Select `data/products_powerbi.csv`
-4. Data types will be auto-detected
-
----
-
-## Responsible Scraping
-
-This project targets a public scraping sandbox explicitly intended for practice. When adapting it to other sites:
-
-- **Check `robots.txt` and the site's Terms of Service** before scraping
-- **Keep a delay between requests** (`--delay`, default 1s) and do not raise the browser concurrency limit
-- **Identify your client honestly** via the `USER_AGENT` env var where appropriate
-- **Never scrape private, personal, or paywalled data**, and never bypass authentication or captchas
-- **Fail gracefully**: both scrapers back off and stop after repeated failures instead of hammering the server
-
----
-
-## Known Limitations
-
-- **Source rendering**: The browser scraper supports JavaScript. Static scraping can only use markup supplied in the HTTP response; it cannot wait for client-rendered cards.
-- **Weak and legacy identities**: Records without a stable source identity are preserved separately. They are not suitable for reliable price-history comparisons.
-- **Sandbox-specific**: The CSS selectors (`div.product-card`, `h4`) are tailored to the Oxylabs sandbox. Adapting to a different site would require updating the selectors.
-
----
-
-## Technologies
-
-- **Python 3.9+**
-- **Playwright** - Browser automation for JS-rendered sites
-- **BeautifulSoup4** - HTML parsing
-- **Requests** - HTTP client
-- **Pandas** - Report statistics and CSV export
-- **SQLModel / Pydantic** - ORM and data validation
-- **Typer / Rich** - CLI interface
-- **Chart.js / Grid.js / Alpine.js** - Frontend visualization
-- **Jinja2** - HTML templating
-- **Docker** - Containerization
-- **GitHub Actions** - CI/CD
+## Documentation
+
+- **[How ScrapingStore handles uncertain data (`docs/CONCEPTS.md`)](docs/CONCEPTS.md)**: unknown prices, unseen products, quality gates, data checks and reparsing.
+- **[Reference (`docs/REFERENCE.md`)](docs/REFERENCE.md)**: commands, environment variables, TOML recipes, Docker and tests.
+- **[Changelog (`CHANGELOG.md`)](CHANGELOG.md)**: release history from 1.0.0 to 3.0.0.
 
 ---
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE).

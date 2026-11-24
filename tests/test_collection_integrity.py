@@ -2,8 +2,8 @@
 
 import json
 import sqlite3
-from datetime import timezone
 from contextlib import closing
+from datetime import timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -14,7 +14,7 @@ from cleaning.data_cleaner import clean_products
 from database import DatabaseManager
 from main import app
 from models import Product
-from scraper.parsing import parse_page, parse_price, availability_signal
+from scraper.parsing import availability_signal, parse_page, parse_price
 from scraper.product_scraper import StaticScraper
 from scraper.results import PageResult, ScrapeRunResult
 from visualization.report_data import ReportSnapshot
@@ -355,8 +355,10 @@ def test_static_cancellation_between_pages_finishes_run_and_keeps_products():
 
 @pytest.mark.parametrize("allow, expected_export", [(False, False), (True, True)])
 def test_partial_cli_saves_evidence_and_requires_explicit_publication(
-    tmp_path, allow, expected_export
+    tmp_path, allow, expected_export, monkeypatch
 ):
+    monkeypatch.setenv("SCRAPINGSTORE_HOME", str(tmp_path))
+    monkeypatch.delenv("DATA_DIR", raising=False)
     db = DatabaseManager(f"sqlite:///{tmp_path / 'products.db'}")
     product = Product(
         name="Valid", price=None, source_id="1", source_url="https://source.test"
@@ -373,11 +375,10 @@ def test_partial_cli_saves_evidence_and_requires_explicit_publication(
         ],
     ).finish("page_limit")
     with (
-        patch("main.DatabaseManager", return_value=db),
-        patch("main._create_scraper") as factory,
-        patch("main.DATA_DIR", tmp_path),
+        patch("scrapingstore.cli.app.DatabaseManager", return_value=db),
+        patch("scrapingstore.cli.app._create_scraper") as factory,
         patch.object(db, "export_for_powerbi") as export,
-        patch("main._generate_pipeline_dashboards") as render,
+        patch("scrapingstore.cli.app._generate_pipeline_dashboard") as render,
     ):
         factory.return_value.scrape.return_value = run
         result = CliRunner().invoke(
@@ -387,7 +388,7 @@ def test_partial_cli_saves_evidence_and_requires_explicit_publication(
         assert export.called is expected_export
         assert render.called is expected_export
         factory.return_value.close.assert_called_once()
-    manifest = json.loads((tmp_path / "runs" / f"{run.run_id}.json").read_text())
+    manifest = json.loads((tmp_path / "data" / "runs" / f"{run.run_id}.json").read_text())
     assert manifest["status"] == "partial" and manifest["missing_prices"] == 1
     assert manifest["pages_failed"] == 1
     reopened = DatabaseManager(f"sqlite:///{tmp_path / 'products.db'}")
@@ -431,7 +432,9 @@ def test_rejected_cards_make_run_partial_without_discarding_valid_cards():
     assert run.manifest()["rejected_cards"] == 1
 
 
-def test_complete_and_failed_cli_exit_codes(tmp_path):
+def test_complete_and_failed_cli_exit_codes(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCRAPINGSTORE_HOME", str(tmp_path))
+    monkeypatch.delenv("DATA_DIR", raising=False)
     for status, code in [("empty", 0), ("failed", 1)]:
         db = DatabaseManager(f"sqlite:///{tmp_path / (status + '.db')}")
         page = PageResult(1, "https://source.test", status=status)
@@ -439,16 +442,15 @@ def test_complete_and_failed_cli_exit_codes(tmp_path):
             "page_limit"
         )
         with (
-            patch("main.DatabaseManager", return_value=db),
-            patch("main._create_scraper") as factory,
-            patch("main.DATA_DIR", tmp_path),
+            patch("scrapingstore.cli.app.DatabaseManager", return_value=db),
+            patch("scrapingstore.cli.app._create_scraper") as factory,
         ):
             factory.return_value.scrape.return_value = run
             result = CliRunner().invoke(
                 app, ["scrape", "--no-dashboard", "--no-export"]
             )
             assert result.exit_code == code, result.output
-            assert (tmp_path / "runs" / f"{run.run_id}.json").exists()
+            assert (tmp_path / "data" / "runs" / f"{run.run_id}.json").exists()
 
 
 @pytest.mark.parametrize("stop_reason", ["source_end", "deadline"])

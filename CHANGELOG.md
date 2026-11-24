@@ -2,90 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.0] - 2026-11-23
+
+### Major Upgrades
+- **Proper `scrapingstore` package architecture:** Eliminated `site-packages` top-level namespace pollution; split cleanly into `sources/`, `transport/`, `ledger/`, `quality/`, `analytics/`, `report/`, and `cli/`.
+- **Single-file offline report:** One HTML page with no external scripts, styles or fonts replaces the 2.x modern and terminal dashboards. The first sentence summarises the latest run and each number in it filters the table. Three charts follow it: how much a typical price has moved since the first run, price drops and rises per run, and stock per run. The table has one row per product and one column per run (up to 12), with price drops and rises, sold-out stretches, unreadable prices and degraded runs marked. Below it: current prices by category (dots dim to match the table's filter), a histogram of how long products stayed sold out, notes (degraded runs, products no longer seen, data checks), CSV export of the filtered rows, and light and dark themes. The catalog travels as a ~12× smaller dictionary-encoded columnar bundle.
+- **Careful run-to-run changes:** Summary counts compare only the last two runs and only products with a stable ID, matching `compare-runs`. A price that changed across a run that couldn't read it is marked ▽/△ instead of being attributed to a run. The KS price-shift check compares against the last complete run, so a degraded run doesn't read as a market shift.
+- **Typed SQLite Ledger & Content-Addressed Raw HTML Archive:** Added typed columns on `CollectionRun`, `ProductObservation`, `PageRecord` (with latency/bytes/fingerprint), integer minor units (`price_minor`), and gzipped `RawPageBlob` storage powering **`scrapingstore reparse`**.
+- **Quality Gates & Auto Data Forensics (`smells`):** Detect silent selector drift (`degraded` status, exit code 3) and automatically flag lazy-load placeholder images, synthetic positional stock alternation, discrete `.99` pricing ladders, batch timestamps, weak identities, and KS distribution shifts.
+- **Pluggable Adapters & Built-in Mock Market (`scrapingstore demo`):** Fixed Oxylabs lazy-load image extraction (`data-src`/`srcset` + placeholder rejection) and recovered 23 genres from `/assets/*.svg`; added universal Schema.org `JsonLdAdapter`, declarative TOML `RecipeAdapter`, `--type auto` smart transport fallback, route-blocking Playwright optimization, and a deterministic 5-epoch `MockMarket`.
+- **Git-for-the-Shelf CLI, local server & TUI:** Added short run IDs (`@latest`, `@prev`, prefix matching), Rich live progress, `diff`, `blame`, `reparse`, `smells`, `doctor`, `demo`, `serve` (rebuilds the report on every page load), and `tui`.
+- **Security, Hygiene & Tooling:** Enabled Jinja autoescape, added server CSV formula-injection escaping, atomic file writes, cwd-aware lazy config, honest default `User-Agent`, `.dockerignore` + non-root Docker user, Ruff linting, pure-Python core analytics (pandas now optional), and untracked 21 MB of orphaned v1.0 artifacts under `data/`.
+
+### Removed
+- The terminal-style report (`dashboard_terminal.html`), `generate_terminal_dashboard`, and the `terminal_dashboard_html_path` / `docs_terminal_dashboard_html_path` settings. The 2.x imports in `visualization/`, `main.py` and `config.py` still work and raise a `DeprecationWarning`; `generate_terminal_dashboard` now writes the standard report. The GitHub Pages `dashboard_terminal.html` redirects to the report.
+
 ## [2.0.1] - 2026-09-08
 
-- Show the original UTC collection date or date range prominently; keep report-generation time secondary and replace empty collection disclosures with a concise explanation.
-- Replace the arbitrary premium-price KPI with median EUR price, and describe availability as last observed stock evidence without inventory-health claims.
-- Separate high-price outliers from the main histogram, retain empty equal-width bins, and keep every known price in statistics and exports.
-- Reserve space for chart tick labels and refresh both published themes and README previews.
+- Show original UTC collection dates, median EUR price, separate high-price outliers, and observation freshness.
 
 ## [2.0.0] - 2026-09-08
 
-### Breaking changes
-
-- Scrapers return `ScrapeRunResult`; library callers read `.products` and inspect `.status` rather than receiving a plain list.
-- Unknown prices are nullable rather than zero; legacy database upgrades preserve a backup table and mark historical zeros `legacy_unknown`.
-
-### Added and improved
-
-- Compare immutable runs with `compare-runs OLD NEW`: name, availability and price changes, explicit one-sided observations, partial-run warnings and excluded weak identities.
-- Show seven-day observation freshness in both themes and per-product UTC times in the modern catalog, without inferring stock from absence.
-- Validate clean wheel installations on Linux and Windows with Python 3.9 and 3.13, including installed CLI commands and both bundled report templates.
-- Refresh the archived showcase, improve text contrast, make terminal layout responsive, respect reduced motion, and keep theme navigation available on phones.
-
-- Archive immutable per-run product observations with catalog updates and manifests in one transaction; retain newer catalog values when older collections finish later.
-- Add `runs`, `inspect-run --products`, and `generate-report --run-id` for inspecting and replaying saved collection evidence, including empty and partial runs.
-- Preserve original manifests on conflicting retries and distinguish historical records without captured observations.
-- Retain collected evidence after unexpected collector errors, finalize static cancellation during delays, mark late responses incomplete, and allow recovery after rejected-only pages.
-- Preserve structured complete, partial, failed, empty and cancelled collection outcomes with per-page manifests and publication gating.
-- Share source-specific parsing, preserve missing prices and raw signals, and exclude unknown prices from statistics without dropping free products.
-- Upsert by unique source identities and preserve weak identities without collapsing equal titles.
-- Migrate legacy SQLite catalogs transactionally, retaining the original table and treating historical zero prices as unknown.
-- Bound browser and static retries, handle HTTP failures explicitly, detect repeated pages, and expose a public async browser API.
-- Include collection status in reports and export provenance with UTC timestamps.
-
-- Select the browser scraper by default for the configured JavaScript source.
-- Render both dashboard themes from one stored-catalog snapshot with shared statistics and report time.
-- Correct even medians, include zero prices consistently, and count histogram boundary values once.
-- Resolve sibling report links for local, GitHub Pages and custom output paths.
-- Share search, availability and price query state between the catalog and all-pages CSV export; label summaries as full-catalog values.
-- Add fixture-based CLI and browser regressions and run the browser checks in CI.
-
-## [1.2.0] - 2026-06-12
-### Added
-- Redesigned analytics dashboard with filters, CSV export, availability insights, and top-product rankings.
-- GitLab CI support and a `generate-report --docs` command for publishing GitHub Pages output.
-- Regression tests for empty dashboards, safe data embedding, complete upserts, and CLI lifecycle behavior.
-
-### Fixed
-- Updated all mutable product fields during database upserts.
-- Initialized the database for export and report-only commands.
-- Escaped embedded dashboard data and dynamic HTML to prevent scraped content from injecting scripts.
-- Aligned the Playwright Python package and Docker browser image versions.
-- Rejected non-finite prices that would break JSON and analytics.
-- Included dashboard templates in built wheels and made output paths workspace-relative.
-
-### Changed
-- Running the CLI without a command now displays help instead of starting a network scrape.
-- Runtime and development dependencies are split between `requirements.txt` and `requirements-dev.txt`.
-- CI now enforces the full Flake8 configuration instead of reporting style failures without failing.
-
-## [1.1.1] - 2026-02-22
-### Fixed
-- Fixed availability KPI showing raw decimal instead of percentage in modern dashboard.
-- Fixed Grid.js crash on null/undefined product fields (null-safe data mapping).
-- Pinned Grid.js to v6.2.0 for stability.
-- Added missing `rich` dependency to `pyproject.toml`.
-- Added `.coverage` to `.gitignore`.
-
-### Removed
-- Removed unused `plotly` from `pyproject.toml` and `requirements.txt`.
-- Removed unused `fake-useragent` from `requirements.txt`.
-
-### Changed
-- Regenerated `docs/` dashboard files from updated templates.
-
-## [1.1.0] - 2025-12-16
-### Added
-- CI/CD Pipeline with GitHub Actions.
-- Docker support (Dockerfile, docker-compose.yml).
-- Comprehensive Type Annotations.
-- Expanded Test Coverage.
-- Pre-commit hooks.
-- Architecture diagram in README.
+- Introduced `ScrapeRunResult`, nullable unknown prices, immutable per-run observation history, and `compare-runs`.
 
 ## [1.0.0] - 2025-12-11
-### Initial Release
-- Basic scraping functionality.
-- Data cleaning pipeline.
-- Visualization dashboard.
+
+- Initial release with Playwright/Requests scraping, cleaning, SQLite storage, and HTML dashboards.

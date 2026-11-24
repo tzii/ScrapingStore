@@ -1,0 +1,17 @@
+.git
+.venv
+venv
+node_modules
+data
+docs
+assets
+tests
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+htmlcov
+build
+dist
+*.egg-info
+.env

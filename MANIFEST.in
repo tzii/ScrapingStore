@@ -1,3 +1,2 @@
-include CHANGELOG.md CONTRIBUTING.md requirements.txt requirements-dev.txt package.json package-lock.json
-recursive-include tests *.py
-recursive-include scripts *.py
+recursive-include scrapingstore/report/templates *.html
+include README.md LICENSE CHANGELOG.md

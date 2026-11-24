@@ -5,6 +5,7 @@ Tests for Product model validation.
 import math
 
 import pytest
+
 from models import Product
 
 

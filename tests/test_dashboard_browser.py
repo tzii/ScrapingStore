@@ -1,8 +1,9 @@
-"""Exercise the generated reports using real Alpine, Grid.js and Chart.js locally."""
+"""Real Chromium tests for the offline HTML report (run with --run-browser)."""
+
+from __future__ import annotations
 
 import csv
 import io
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -10,296 +11,275 @@ from urllib.parse import unquote, urlsplit
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from models import Product
-from visualization.dashboard_generator import generate_dashboard
-from visualization.report_data import ReportSnapshot
-from visualization.terminal_dashboard_generator import generate_terminal_dashboard
-
-ROOT = Path(__file__).resolve().parents[1]
-LIBRARIES = {
-    "https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js": "alpinejs/dist/cdn.min.js",
-    "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js": "chart.js/dist/chart.umd.js",
-    "https://unpkg.com/gridjs@6.2.0/dist/gridjs.umd.js": "gridjs/dist/gridjs.umd.js",
-}
+from scrapingstore.ledger.models import Product
+from scrapingstore.report.generator import generate_dashboard
+from scrapingstore.report.snapshot import ReportSnapshot
 
 
 @pytest.fixture
 def report_page(request, tmp_path):
     if not request.config.getoption("--run-browser"):
         pytest.skip("Use --run-browser to run the browser regressions")
-    for dependency in LIBRARIES.values():
-        assert (
-            ROOT / "node_modules" / dependency
-        ).exists(), "Run npm ci before browser tests"
+
+    external_requests: list[str] = []
 
     def respond(route):
         url = route.request.url
-        if url in LIBRARIES:
-            route.fulfill(
-                path=ROOT / "node_modules" / LIBRARIES[url],
-                content_type="text/javascript",
-            )
-        elif url.startswith("https://reports.test/"):
+        if url.startswith("https://reports.test/"):
             path = tmp_path / unquote(urlsplit(url).path.lstrip("/"))
             route.fulfill(path=path, content_type="text/html")
-        elif (
-            url == "https://cdn.tailwindcss.com/"
-            or url == "https://cdn.tailwindcss.com"
-        ):
-            # Styling is outside these behavior tests; no CDN or source-site requests.
-            route.fulfill(body="window.tailwind = {};", content_type="text/javascript")
         else:
-            route.fulfill(body="", content_type="text/css")
+            external_requests.append(url)
+            route.abort()
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         context = browser.new_context(
-            reduced_motion="reduce", viewport={"width": 1440, "height": 1000}
+            reduced_motion="reduce",
+            viewport={"width": 1440, "height": 1000},
+            locale="en-GB",
+            timezone_id="UTC",
         )
         context.route("**/*", respond)
         page = context.new_page()
-        errors = []
+        errors: list[str] = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         yield page
         context.close()
         browser.close()
-        assert errors == []
+        assert errors == [], f"JS page errors: {errors}"
+        assert external_requests == [], f"Unexpected external requests: {external_requests}"
 
 
-def render_pair(tmp_path, products, modern_name="dashboard.html"):
-    snapshot = ReportSnapshot.from_products(products)
-    modern = tmp_path / modern_name
-    terminal = tmp_path / "dashboard_terminal.html"
-    generate_dashboard(snapshot, str(modern), terminal_path=str(terminal))
-    generate_terminal_dashboard(snapshot, str(terminal), dashboard_path=str(modern))
-    return "https://reports.test/" + modern_name
+def render(tmp_path, snapshot, name="dashboard.html"):
+    generate_dashboard(snapshot, str(tmp_path / name))
+    return "https://reports.test/" + name
 
 
 def download_rows(page):
     with page.expect_download() as download:
-        page.get_by_role("button", name="Export all matching products as CSV").click()
+        page.get_by_role("button", name="Export matching products as CSV").click()
     text = Path(download.value.path()).read_text(encoding="utf-8-sig")
     return list(csv.DictReader(io.StringIO(text)))
 
 
-def test_freshness_is_visible_and_exported_without_overriding_stock(
-    report_page, tmp_path
-):
-    product = Product(
+def item(key, price, availability="In Stock"):
+    return Product(
+        name=f"Product {key}",
+        source_id=key,
+        source_url="https://example.test",
+        product_url=f"https://example.test/products/{key}",
+        price=price,
+        availability=availability,
+        category="Games",
+    )
+
+
+def three_runs():
+    """A drops, B rises, C changes across an unreadable price, D restocks, F is new, G vanishes."""
+    run_products = [
+        [
+            item("A", 20),
+            item("B", 10),
+            item("C", 30),
+            item("D", 40, "Out of Stock"),
+            item("E", 50),
+            item("G", 60),
+        ],
+        [
+            item("A", 20),
+            item("B", 10),
+            item("C", None),
+            item("D", 40, "Out of Stock"),
+            item("E", 50),
+            item("G", 60),
+        ],
+        [item("A", 15), item("B", 12), item("C", 25), item("D", 40), item("E", 50), item("F", 70)],
+    ]
+    statuses = ["complete", "degraded", "complete"]
+    history = [
+        (
+            {
+                "run_id": f"run-{i}",
+                "started_at": f"2026-09-{1 + 7 * i:02d}T10:00:00+00:00",
+                "status": statuses[i],
+            },
+            products,
+        )
+        for i, products in enumerate(run_products)
+    ]
+    catalog = run_products[2] + [run_products[1][5]]
+    return ReportSnapshot.from_products(
+        catalog,
+        run=history[-1][0],
+        history=history,
+        generated_at=datetime(2026, 9, 15, 12, tzinfo=timezone.utc),
+    )
+
+
+def test_headline_counts_filter_the_table_and_the_export(report_page, tmp_path):
+    page = report_page
+    page.goto(render(tmp_path, three_runs()))
+    lede = page.locator("#lede")
+    expect(lede).to_have_text(
+        "On 15 Sep, ▼1 price dropped, ▲1 rose, 1 product came back in stock, "
+        "1 new product appeared and 1 wasn't seen."
+    )
+    expect(page.locator("#status")).to_have_text("6 of 7 products changed over these 3 runs")
+    expect(page.locator("#grid tbody tr")).to_have_count(6)
+    expect(page.locator("#grid thead")).to_contain_text("83% read")
+
+    drop = lede.locator('button[data-ev="drop"]')
+    drop.click()
+    expect(drop).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("#status")).to_contain_text("1 product whose price dropped on 15 Sep")
+    expect(page.locator("#grid tbody tr")).to_have_count(1)
+    expect(page.locator("#grid tbody")).to_contain_text("Product A")
+    assert [row["name"] for row in download_rows(page)] == ["Product A"]
+
+    page.get_by_role("button", name="Show all changes").click()
+    expect(page.locator("#grid tbody tr")).to_have_count(6)
+    page.get_by_role("button", name="Show the 1 product that didn't change").click()
+    expect(page.locator("#grid tbody tr")).to_have_count(7)
+    assert len(download_rows(page)) == 7
+
+    page.get_by_label("Search products").fill("zzz")
+    expect(page.locator("#grid")).to_contain_text("No products match.")
+    page.keyboard.press("Escape")
+    expect(page.locator("#grid tbody tr")).to_have_count(7)
+
+
+def test_gap_changes_are_marked_and_explained(report_page, tmp_path):
+    page = report_page
+    page.goto(render(tmp_path, three_runs()))
+    row = page.locator("#grid tbody tr", has_text="Product C")
+    expect(row.locator('td[data-i="2"] .v')).to_have_text("▽25.00")
+    row.locator('td[data-i="2"]').hover()
+    expect(page.locator("#tip")).to_contain_text("Down €5.00 since 1 Sep")
+    expect(page.locator("#tip")).to_contain_text("the run it changed in is unknown")
+    notes = page.locator("#notes")
+    expect(notes).to_contain_text("8 Sep run was degraded.")
+    expect(notes).to_contain_text("1 not seen since 8 Sep: Product G.")
+    expect(page.locator("#legend")).to_contain_text("Changed, run unknown")
+
+
+def hover_run(page, chart, run_index):
+    svg = page.locator(f"#{chart}")
+    box = svg.bounding_box()
+    band = page.locator(f'#{chart} rect.band[data-i="{run_index}"]').bounding_box()
+    svg.hover(position={"x": band["x"] - box["x"] + band["width"] / 2, "y": 4})
+
+
+def test_charts_summarise_the_runs(report_page, tmp_path):
+    page = report_page
+    page.goto(render(tmp_path, three_runs()))
+    expect(page.locator("#overview")).to_be_visible()
+    # A 20→15 and B 10→12 between the last two runs that read their prices; D and E held.
+    expect(page.locator("#index-title")).to_have_text("Prices down 2.6% since 1 Sep")
+    expect(page.locator("#changes-title")).to_have_text("3 price changes since 1 Sep")
+    expect(page.locator("#changes-key")).to_contain_text("Run unknown")
+    expect(page.locator("#stock-title")).to_have_text("6 of 6 in stock on 15 Sep")
+    expect(page.locator("#chart-index circle.pt.hollow")).to_have_count(1)
+    expect(page.locator("#chart-changes path.gap")).to_have_count(1)
+
+    hover_run(page, "chart-changes", 2)
+    tip = page.locator("#tip")
+    expect(tip).to_contain_text("1 dropped, 1 rose since the previous run")
+    expect(tip).to_contain_text("1 more changed across a run that couldn't read them")
+    expect(page.locator('#chart-stock rect.band.on[data-i="2"]')).to_have_count(1)
+
+    expect(page.locator("#prices-title")).to_have_text("Prices on 15 Sep")
+    expect(page.locator("#chart-prices circle.dot")).to_have_count(6)
+    expect(page.locator("#restock-title")).to_have_text("Restocks took about 2 weeks")
+
+    page.locator('#lede button[data-ev="drop"]').click()
+    expect(page.locator("#chart-prices circle.dot:not(.dim)")).to_have_count(1)
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    # The report redraws shortly after a resize; wait for it rather than for a fixed time.
+    page.wait_for_function("document.documentElement.scrollWidth <= 390")
+    assert page.evaluate("document.getElementById('chart-stock').viewBox.baseVal.width") <= 358
+
+
+def test_single_run_freshness_csv_theme_and_mobile(report_page, tmp_path):
+    observed = Product(
         name="Older observation",
         price=0,
         availability="In Stock",
+        category="Action",
         source_url="https://example.test",
         scraped_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
     )
     page = report_page
-    page.goto(render_pair(tmp_path, [product]))
-    expect(page.locator("#freshness")).to_contain_text("1 over 7 days old")
-    expect(page.locator("#grid-table tbody")).to_contain_text(
-        "Observed over 7 days ago"
-    )
-    expect(page.locator("#grid-table tbody")).to_contain_text("In Stock")
+    page.goto(render(tmp_path, ReportSnapshot.from_products([observed])))
+    expect(page.locator("#lede")).to_have_text("1 product, 1 in stock.")
+    expect(page.locator("#overview")).to_be_hidden()
+    expect(page.locator("#restock")).to_be_hidden()
+    expect(page.locator("#prices")).to_be_hidden()
+    expect(page.locator("#freshness")).to_contain_text("days old")
+    expect(page.locator("#grid tbody")).to_contain_text("0.00")
     row = download_rows(page)[0]
     assert row["freshness"] == "stale" and row["availability"] == "In Stock"
     assert row["price"] == "0"
-    page.get_by_role("link", name="Terminal", exact=False).click()
-    expect(page.locator("#freshness")).to_contain_text("1 over 7 days old")
+
+    page.get_by_role("button", name="Switch theme").click()
+    theme = page.evaluate("document.documentElement.dataset.theme")
+    assert theme in ("light", "dark")
+    page.reload()
+    assert page.evaluate("document.documentElement.dataset.theme") == theme
+
     page.set_viewport_size({"width": 390, "height": 844})
-    summary = page.locator(".price-summary")
-    summary.scroll_into_view_if_needed()
-    bounds = summary.bounding_box()
-    assert bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390
-    assert page.evaluate("document.documentElement.scrollWidth") == 390
-    expect(page.locator("#log-feed")).to_contain_text("Observed over 7 days ago")
+    assert page.evaluate("document.documentElement.scrollWidth") <= 390
 
 
-def test_search_filters_pagination_and_export_agree(report_page, tmp_path):
+def test_hostile_text_zero_price_and_missing_price_separation(report_page, tmp_path):
+    hostile = '=1+1, "quoted" </script><script>window.pwned=true</script>'
     products = [
-        Product(
-            name=f"Match {i:02d}",
-            price=10 + i,
-            availability="In Stock",
-            source_url="https://example.test",
-        )
-        for i in range(16)
-    ] + [
-        Product(
-            name="Match unavailable",
-            price=20,
-            availability="Out of Stock",
-            source_url="https://example.test",
-        ),
-        Product(
-            name="Match expensive",
-            price=50,
-            availability="In Stock",
-            source_url="https://example.test",
-        ),
-        Product(
-            name="Unrelated",
-            price=20,
-            availability="In Stock",
-            source_url="https://example.test",
-        ),
+        Product(name=hostile, price=0, availability="Unknown", source_url="https://example.test"),
+        Product(name="Unknown price", price=None, source_url="https://example.test"),
+        Product(name="Paid product", price=10, source_url="https://example.test"),
     ]
     page = report_page
-    page.goto(render_pair(tmp_path, products))
-    expect(page.locator("#grid-table tbody tr")).to_have_count(12)
-    page.get_by_label("Search catalog").fill("mAtCh")
-    page.get_by_label("Filter by availability").select_option("In Stock")
-    page.get_by_label("Minimum price").fill("10")
-    page.get_by_label("Maximum price").fill("30")
-    expect(page.locator("#catalog-match-count")).to_have_text("16 matching products")
-    page.get_by_role("button", name="Next", exact=True).click()
-    expect(page.locator("#grid-table tbody tr")).to_have_count(4)
-    rows = download_rows(page)
-    assert {row["name"] for row in rows} == {f"Match {i:02d}" for i in range(16)}
-    assert len(rows) == 16
-    # Summaries and charts remain the explicitly labelled full catalog.
-    expect(page.locator("#kpi-total")).to_have_text("19")
-    assert (
-        page.evaluate(
-            "Chart.getChart('priceChart').data.datasets[0].data.reduce((a,b) => a+b, 0)"
-        )
-        == 18
-    )
-    expect(page.locator("#price-outliers")).to_contain_text("1 high-price outlier")
-    page.get_by_label("Search catalog").fill("Match 00")
-    expect(page.locator("#grid-table tbody tr")).to_have_count(1)
-    assert [row["name"] for row in download_rows(page)] == ["Match 00"]
-    page.get_by_label("Search catalog").fill("no such product")
-    expect(page.locator("#catalog-match-count")).to_have_text("0 matching products")
-    assert download_rows(page) == []
-    page.get_by_role("button", name="Reset", exact=True).click()
-    expect(page.locator("#catalog-match-count")).to_have_text("19 matching products")
-    expect(page.get_by_label("Search catalog")).to_have_value("")
-    assert len(download_rows(page)) == 19
-
-
-def test_dates_median_and_outliers_are_visible_without_empty_disclosure(
-    report_page, tmp_path
-):
-    products = [
-        Product(
-            name=f"Price {price}",
-            price=price,
-            availability="In Stock",
-            source_url="https://example.test",
-            scraped_at=datetime(2025, 12, 11, tzinfo=timezone.utc),
-        )
-        for price in [50, 55, 60, 65, 70, 75, 80, 85] * 3 + [500, 800]
-    ]
-    page = report_page
-    page.goto(render_pair(tmp_path, products))
-    expect(page.locator("#observation-period")).to_contain_text(
-        "Data collected 11 December 2025"
-    )
-    expect(page.locator("details#collection-outcome")).to_have_count(0)
-    expect(page.locator("#kpi-median")).to_have_text("70.00")
-    expect(page.locator("#price-outliers")).to_contain_text("2 high-price outliers")
-    assert (
-        page.evaluate(
-            "Chart.getChart('priceChart').data.datasets[0].data.reduce((a,b) => a+b, 0)"
-        )
-        == 24
-    )
-    assert page.evaluate("Chart.getChart('priceChart').scales.y.width") >= 60
-    for _ in range(2):
-        page.get_by_role("button", name="Toggle color theme").click()
-        expected_color = page.evaluate(
-            "Alpine.store('theme').isDark ? '#a0a0ad' : '#706b66'"
-        )
-        assert (
-            page.evaluate("Chart.getChart('priceChart').options.scales.y.ticks.color")
-            == expected_color
-        )
-        assert (
-            page.evaluate(
-                "Chart.getChart('availChart').options.plugins.legend.labels.color"
-            )
-            == expected_color
-        )
-    assert len(download_rows(page)) == 26
-    page.get_by_role("link", name="Terminal", exact=False).click()
-    expect(page.locator("#price-outliers")).to_contain_text("2 high-price outliers")
-    expect(page.locator("#stat-max")).to_have_text("€800.00")
-
-
-@pytest.mark.parametrize("modern_name", ["dashboard.html", "index.html", "custom.html"])
-def test_navigation_and_terminal_statistics(report_page, tmp_path, modern_name):
-    products = [
-        Product(name=f"Product {p}", price=p, source_url="https://example.test")
-        for p in [0, 10]
-    ]
-    page = report_page
-    url = render_pair(tmp_path, products, modern_name)
-    page.goto(url)
-    page.get_by_role("link", name="Terminal", exact=False).click()
-    expect(page.locator("#t-price")).to_have_text("5.00")
-    expect(page.locator("#stat-med")).to_have_text("€5.00")
-    expect(page.locator("#t-stock")).to_have_text("0%")
-    assert sum(json.loads(page.locator("#chart-data").text_content())["counts"]) == 2
-    page.get_by_role("link", name="[ DASHBOARD ]", exact=True).click()
-    expect(page).to_have_url(url)
-
-
-def test_hostile_text_zero_price_and_immediate_export(report_page, tmp_path):
-    name = '=1+1, "quoted" </script><script>window.pwned=true</script>'
-    page = report_page
-    page.goto(
-        render_pair(
-            tmp_path,
-            [
-                Product(
-                    name=name,
-                    price=0,
-                    availability="Unknown",
-                    source_url="https://example.test",
-                )
-            ],
-        )
-    )
-    page.get_by_label("Search catalog").fill("quoted")
-    page.get_by_label("Maximum price").fill("0")
-    rows = download_rows(page)
-    assert len(rows) == 1
-    assert rows[0]["name"] == "'" + name
-    assert float(rows[0]["price"]) == 0
-    expect(page.locator("#grid-table tbody tr")).to_contain_text(name)
+    page.goto(render(tmp_path, ReportSnapshot.from_products(products)))
+    expect(page.locator("#facts")).to_contain_text("Median price €5.00.")
+    unknown = page.locator("#grid tbody tr", has_text="Unknown price")
+    expect(unknown.locator(".v")).to_have_text("?")
     assert page.evaluate("window.pwned === undefined")
 
-
-def test_empty_reports_remain_navigable(report_page, tmp_path):
-    page = report_page
-    page.goto(render_pair(tmp_path, []))
-    expect(page.locator("#catalog-match-count")).to_have_text("0 matching products")
-    assert download_rows(page) == []
-    page.get_by_role("link", name="Terminal", exact=False).click()
-    expect(page.locator("#t-count")).to_have_text("0")
-    expect(page.locator("#stat-med")).to_have_text("—")
-
-
-def test_missing_prices_are_distinct_from_free_products(report_page, tmp_path):
-    products = [
-        Product(name=name, price=price, source_url="https://fixture.test")
-        for name, price in [
-            ("Unknown price", None),
-            ("Free product", 0),
-            ("Paid product", 10),
-        ]
-    ]
-    page = report_page
-    page.goto(render_pair(tmp_path, products))
-    expect(page.locator("#kpi-avg")).to_have_text("5.00")
-    expect(page.locator("#grid-table tbody")).to_contain_text("Price unavailable")
     exported = download_rows(page)
     assert next(p for p in exported if p["name"] == "Unknown price")["price"] == ""
-    page.get_by_label("Maximum price").fill("0")
-    expect(page.locator("#catalog-match-count")).to_have_text("1 matching products")
-    assert [p["name"] for p in download_rows(page)] == ["Free product"]
-    page.get_by_role("button", name="Reset", exact=True).click()
-    page.get_by_label("Search catalog").fill("price unavailable")
-    assert [p["name"] for p in download_rows(page)] == ["Unknown price"]
-    page.get_by_role("link", name="Terminal", exact=False).click()
-    expect(page.locator("#t-price")).to_have_text("5.00")
-    expect(page.locator("#stat-med")).to_have_text("€5.00")
+    assert next(p for p in exported if "quoted" in p["name"])["name"] == "'" + hostile
+
+
+def test_prices_use_the_stores_main_currency(report_page, tmp_path):
+    products = [
+        Product(
+            name=f"Item {n}",
+            price=n * 10,
+            currency="USD",
+            category="Tools",
+            source_url="https://example.test",
+        )
+        for n in range(1, 5)
+    ] + [
+        Product(
+            name="Import",
+            price=99,
+            currency="GBP",
+            category="Tools",
+            source_url="https://example.test",
+        )
+    ]
+    page = report_page
+    page.goto(render(tmp_path, ReportSnapshot.from_products(products)))
+    expect(page.locator("#facts")).to_contain_text("Median price 25.00 USD.")
+    expect(page.locator("#prices")).to_be_visible()
+    expect(page.locator("#chart-prices circle.dot")).to_have_count(4)
+    expect(page.locator("#chart-prices")).to_contain_text("median 25.00 USD")
+
+
+def test_empty_report_says_so(report_page, tmp_path):
+    page = report_page
+    page.goto(render(tmp_path, ReportSnapshot.from_products([])))
+    expect(page.get_by_text("No data yet.")).to_be_visible()
+    expect(page.locator("#report")).to_be_hidden()

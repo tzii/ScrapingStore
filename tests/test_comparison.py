@@ -66,6 +66,10 @@ def test_partial_runs_compare_common_keys_and_keep_one_sided_observations(db_man
         "only_in_new": 1,
         "excluded_old": 1,
         "excluded_new": 1,
+        "price_drops": 0,
+        "price_rises": 0,
+        "restocks": 0,
+        "stockouts": 0,
     }
     assert result["new_run"]["status"] == "partial"
     assert any("incomplete" in message for message in result["warnings"])

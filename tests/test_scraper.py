@@ -2,9 +2,9 @@
 Tests for the StaticScraper module.
 """
 
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
 from bs4 import BeautifulSoup
 
 from scraper.product_scraper import StaticScraper
