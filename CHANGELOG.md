@@ -2,16 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
-
-### Changed
-- **Report visual and motion polish:** Refined the single-file offline HTML report with a higher-contrast light/dark palette, hairline masthead with geometric mark, tactile active states on headline filter controls, synchronized hover crosshairs and focus dimming across overview charts, active dot highlighting in the category beeswarm, subtle reduced-motion-safe entrance/scroll animations, and refreshed GitHub Pages demo (`docs/index.html`) and README previews.
-
-## [3.0.0] - 2026-11-23
+## [3.0.0] - 2026-11-25
 
 ### Major Upgrades
 - **Proper `scrapingstore` package architecture:** Eliminated `site-packages` top-level namespace pollution; split cleanly into `sources/`, `transport/`, `ledger/`, `quality/`, `analytics/`, `report/`, and `cli/`.
-- **Single-file offline report:** One HTML page with no external scripts, styles or fonts replaces the 2.x modern and terminal dashboards. The first sentence summarises the latest run and each number in it filters the table. Three charts follow it: how much a typical price has moved since the first run, price drops and rises per run, and stock per run. The table has one row per product and one column per run (up to 12), with price drops and rises, sold-out stretches, unreadable prices and degraded runs marked. Below it: current prices by category (dots dim to match the table's filter), a histogram of how long products stayed sold out, notes (degraded runs, products no longer seen, data checks), CSV export of the filtered rows, and light and dark themes. The catalog travels as a ~12× smaller dictionary-encoded columnar bundle.
+- **Single-file offline report:** One HTML page with no external scripts, styles or fonts replaces the 2.x modern and terminal dashboards, with refined light and dark themes, a hairline masthead, and subtle reduced-motion-safe entrance/scroll animations. The first sentence summarises the latest run and each count in it filters the table with tactile active highlights. Three charts with synchronized hover crosshairs and focus dimming follow it: how much a typical price has moved since the first run, price drops and rises per run, and stock per run. The table has one row per product and one column per run (up to 12), with price drops and rises, sold-out stretches, unreadable prices, degraded runs, and `/` keyboard search. Below it: current prices by category (dots dim to match the table's filter and highlight on hover), a histogram of how long products stayed sold out, notes (degraded runs, products no longer seen, data checks), CSV export of the filtered rows, and a ~12× smaller dictionary-encoded columnar bundle.
 - **Careful run-to-run changes:** Summary counts compare only the last two runs and only products with a stable ID, matching `compare-runs`. A price that changed across a run that couldn't read it is marked ▽/△ instead of being attributed to a run. The KS price-shift check compares against the last complete run, so a degraded run doesn't read as a market shift.
 - **Typed SQLite Ledger & Content-Addressed Raw HTML Archive:** Added typed columns on `CollectionRun`, `ProductObservation`, `PageRecord` (with latency/bytes/fingerprint), integer minor units (`price_minor`), and gzipped `RawPageBlob` storage powering **`scrapingstore reparse`**.
 - **Quality Gates & Auto Data Forensics (`smells`):** Detect silent selector drift (`degraded` status, exit code 3) and automatically flag lazy-load placeholder images, synthetic positional stock alternation, discrete `.99` pricing ladders, batch timestamps, weak identities, and KS distribution shifts.
