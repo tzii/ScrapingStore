@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Report visual and motion polish:** Refined the single-file offline HTML report with a higher-contrast light/dark palette, hairline masthead with geometric mark, tactile active states on headline filter controls, synchronized hover crosshairs and focus dimming across overview charts, active dot highlighting in the category beeswarm, subtle reduced-motion-safe entrance/scroll animations, and refreshed GitHub Pages demo (`docs/index.html`) and README previews.
+
 ## [3.0.0] - 2026-11-23
 
 ### Major Upgrades
